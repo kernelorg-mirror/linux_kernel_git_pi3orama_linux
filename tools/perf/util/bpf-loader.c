@@ -267,6 +267,25 @@ out:
 	return err < 0 ? err : 0;
 }
 
+int bpf__load(void)
+{
+	struct bpf_object *obj, *tmp;
+	int err = 0;
+
+	bpf_object__for_each_safe(obj, tmp) {
+		err = bpf_object__load(obj);
+		if (err) {
+			pr_debug("bpf: load objects failed\n");
+			goto errout;
+		}
+	}
+	return 0;
+errout:
+	bpf_object__for_each_safe(obj, tmp)
+		bpf_object__unload(obj);
+	return err;
+}
+
 #define bpf__strerror_head(err, buf, size) \
 	char sbuf[STRERR_BUFSIZE], *emsg;\
 	if (!size)\
@@ -306,6 +325,15 @@ int bpf__strerror_probe(int err, char *buf, size_t size)
 			    MAX_PROBES);
 	bpf__strerror_entry(ENOENT, "Selected kprobe point doesn't exist.");
 	bpf__strerror_entry(EEXIST, "Selected kprobe point already exist, try perf probe -d '*'.");
+	bpf__strerror_end(buf, size);
+	return 0;
+}
+
+int bpf__strerror_load(int err, char *buf, size_t size)
+{
+	bpf__strerror_head(err, buf, size);
+	bpf__strerror_entry(EINVAL, "%s: add -v to see detail. Run a CONFIG_BPF_SYSCALL kernel?",
+			    emsg)
 	bpf__strerror_end(buf, size);
 	return 0;
 }

@@ -1156,6 +1156,21 @@ int cmd_record(int argc, const char **argv, const char *prefix __maybe_unused)
 		goto out_symbol_exit;
 	}
 
+	/*
+	 * bpf__probe() also calls symbol__init() if there are probe
+	 * events in bpf objects, so calling symbol_exit when failure
+	 * is safe. If there is no probe event, bpf__load() always
+	 * success.
+	 */
+	err = bpf__load();
+	if (err) {
+		pr_err("Loading BPF programs failed:\n");
+
+		bpf__strerror_load(err, errbuf, sizeof(errbuf));
+		pr_err("\t%s\n", errbuf);
+		goto out_symbol_exit;
+	}
+
 	symbol__init(NULL);
 
 	if (symbol_conf.kptr_restrict)

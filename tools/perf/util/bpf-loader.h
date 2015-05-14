@@ -19,6 +19,9 @@ int bpf__probe(void);
 int bpf__unprobe(void);
 int bpf__strerror_probe(int err, char *buf, size_t size);
 
+int bpf__load(void);
+int bpf__strerror_load(int err, char *buf, size_t size);
+
 void bpf__clear(void);
 #else
 static inline int bpf__prepare_load(const char *filename __maybe_unused)
@@ -29,6 +32,7 @@ static inline int bpf__prepare_load(const char *filename __maybe_unused)
 
 static inline int bpf__probe(void) { return 0; }
 static inline int bpf__unprobe(void) { return 0; }
+static inline int bpf__load(void) { return 0; }
 static inline void bpf__clear(void) { }
 
 static inline int
@@ -53,6 +57,12 @@ bpf__strerror_prepare_load(const char *filename __maybe_unused,
 
 static inline int bpf__strerror_probe(int err __maybe_unused,
 				      char *buf, size_t size)
+{
+	return __bpf_strerror(buf, size);
+}
+
+static inline int bpf__strerror_load(int err __maybe_unused,
+				     char *buf, size_t size)
 {
 	return __bpf_strerror(buf, size);
 }
