@@ -1331,6 +1331,22 @@ retry_open:
 					  err);
 				goto try_fallback;
 			}
+
+			if (evsel->bpf_fd >= 0) {
+				int evt_fd = FD(evsel, cpu, thread);
+				int bpf_fd = evsel->bpf_fd;
+
+				err = ioctl(evt_fd,
+					    PERF_EVENT_IOC_SET_BPF,
+					    bpf_fd);
+				if (err && errno != EEXIST) {
+					pr_err("failed to attach bpf fd %d: %s\n",
+					       bpf_fd, strerror(errno));
+					err = -EINVAL;
+					goto out_close;
+				}
+			}
+
 			set_rlimit = NO_CHANGE;
 
 			/*
