@@ -496,7 +496,9 @@ __cmd_probe(int argc, const char **argv, const char *prefix __maybe_unused)
 			usage_with_options(probe_usage, options);
 		}
 
-		ret = add_perf_probe_events(params.events, params.nevents);
+		ret = add_perf_probe_events(params.events,
+					    params.nevents,
+					    true);
 		if (ret < 0) {
 			pr_err_with_code("  Error: Failed to add events.", ret);
 			return ret;
