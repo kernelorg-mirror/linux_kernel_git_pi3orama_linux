@@ -121,7 +121,8 @@ int parse_events_add_tracepoint(struct list_head *list, int *idx,
 				char *sys, char *event);
 int parse_events_load_bpf(struct parse_events_evlist *data,
 			  struct list_head *list,
-			  char *bpf_file_name);
+			  char *bpf_file_name,
+			  bool source);
 int parse_events_add_numeric(struct parse_events_evlist *data,
 			     struct list_head *list,
 			     u32 type, u64 config,

@@ -16,9 +16,9 @@ typedef int (*bpf_prog_iter_callback_t)(struct probe_trace_event *tev,
 					int fd, void *arg);
 
 #ifdef HAVE_LIBBPF_SUPPORT
-int bpf__prepare_load(const char *filename);
-int bpf__strerror_prepare_load(const char *filename, int err,
-			       char *buf, size_t size);
+int bpf__prepare_load(const char *filename, bool source);
+int bpf__strerror_prepare_load(const char *filename, bool source,
+			       int err, char *buf, size_t size);
 int bpf__probe(void);
 int bpf__unprobe(void);
 int bpf__strerror_probe(int err, char *buf, size_t size);
@@ -30,7 +30,8 @@ void bpf__clear(void);
 
 int bpf__foreach_tev(bpf_prog_iter_callback_t func, void *arg);
 #else
-static inline int bpf__prepare_load(const char *filename __maybe_unused)
+static inline int bpf__prepare_load(const char *filename __maybe_unused,
+				    bool source __maybe_unused)
 {
 	pr_debug("ERROR: eBPF object loading is disabled during compiling.\n");
 	return -1;
@@ -62,6 +63,7 @@ __bpf_strerror(char *buf, size_t size)
 
 static inline int
 bpf__strerror_prepare_load(const char *filename __maybe_unused,
+			   bool source __maybe_unused,
 			   int err __maybe_unused,
 			   char *buf, size_t size)
 {

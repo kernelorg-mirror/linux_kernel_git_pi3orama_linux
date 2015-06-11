@@ -484,7 +484,7 @@ int parse_events_add_tracepoint(struct list_head *list, int *idx,
 
 int parse_events_load_bpf(struct parse_events_evlist *data,
 			  struct list_head *list __maybe_unused,
-			  char *bpf_file_name)
+			  char *bpf_file_name, bool source)
 {
 	int err;
 	char errbuf[BUFSIZ];
@@ -497,9 +497,9 @@ int parse_events_load_bpf(struct parse_events_evlist *data,
 	 * problem. After that probe events file by file is possible.
 	 * However, probing cost is still need to be considered.
 	 */
-	err = bpf__prepare_load(bpf_file_name);
+	err = bpf__prepare_load(bpf_file_name, source);
 	if (err) {
-		bpf__strerror_prepare_load(bpf_file_name, err,
+		bpf__strerror_prepare_load(bpf_file_name, source, err,
 					   errbuf, sizeof(errbuf));
 		data->error->str = strdup(errbuf);
 		data->error->help = strdup("(add -v to see detail)");

@@ -11,6 +11,7 @@
 #include "bpf-loader.h"
 #include "probe-event.h"
 #include "probe-finder.h"
+#include "llvm-utils.h"
 
 #define DEFINE_PRINT_FN(name, level) \
 static int libbpf_##name(const char *fmt, ...)	\
@@ -152,16 +153,28 @@ sync_bpf_program_pev(struct bpf_program *prog)
 	return 0;
 }
 
-int bpf__prepare_load(const char *filename)
+int bpf__prepare_load(const char *filename, bool source)
 {
 	struct bpf_object *obj;
+	int err;
 
 	if (!libbpf_initialized)
 		libbpf_set_print(libbpf_warning,
 				 libbpf_info,
 				 libbpf_debug);
 
-	obj = bpf_object__open(filename);
+	if (source) {
+		void *obj_buf;
+		size_t obj_buf_sz;
+
+		err = llvm__compile_bpf(filename, &obj_buf, &obj_buf_sz);
+		if (err)
+			return err;
+		obj = bpf_object__open_buffer(obj_buf, obj_buf_sz);
+		free(obj_buf);
+	} else
+		obj = bpf_object__open(filename);
+
 	if (!obj) {
 		pr_debug("bpf: failed to load %s\n", filename);
 		return -EINVAL;
@@ -355,12 +368,12 @@ int bpf__foreach_tev(bpf_prog_iter_callback_t func, void *arg)
 	}\
 	buf[size - 1] = '\0';
 
-int bpf__strerror_prepare_load(const char *filename, int err,
-			       char *buf, size_t size)
+int bpf__strerror_prepare_load(const char *filename, bool source,
+			       int err, char *buf, size_t size)
 {
 	bpf__strerror_head(err, buf, size);
-	bpf__strerror_entry(EINVAL, "%s: BPF object file '%s' is invalid",
-			    emsg, filename)
+	bpf__strerror_entry(EINVAL, "%s: BPF %s file '%s' is invalid",
+			    emsg, source ? "source" : "object", filename);
 	bpf__strerror_end(buf, size);
 	return 0;
 }
