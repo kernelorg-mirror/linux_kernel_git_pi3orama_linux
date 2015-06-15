@@ -45,6 +45,7 @@ tools/include/linux/compiler.h
 tools/include/linux/export.h
 tools/include/linux/hash.h
 tools/include/linux/kernel.h
+tools/include/linux/filter.h
 tools/include/linux/list.h
 tools/include/linux/log2.h
 tools/include/linux/poison.h
