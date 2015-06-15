@@ -1123,6 +1123,10 @@ struct option __record_options[] = {
 		   "clang binary to use for compiling BPF scriptlets"),
 	OPT_STRING(0, "clang-opt", &llvm_param.clang_opt, "clang options",
 		   "options passed to clang when compiling BPF scriptlets"),
+#ifdef HAVE_BPF_PROLOGUE
+	OPT_STRING(0, "vmlinux", &symbol_conf.vmlinux_name,
+		   "file", "vmlinux pathname"),
+#endif
 #endif
 	OPT_END()
 };
