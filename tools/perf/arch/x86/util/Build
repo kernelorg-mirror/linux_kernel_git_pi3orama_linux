@@ -3,6 +3,8 @@ libperf-y += tsc.o
 libperf-y += pmu.o
 libperf-y += kvm-stat.o
 
+# BPF_PROLOGUE also need dwarf-regs.o. However, if CONFIG_BPF_PROLOGUE
+# is true, CONFIG_DWARF must true.
 libperf-$(CONFIG_DWARF) += dwarf-regs.o
 
 libperf-$(CONFIG_LIBUNWIND)          += unwind-libunwind.o
