@@ -5,6 +5,7 @@
 #include "intlist.h"
 #include "strlist.h"
 #include "strfilter.h"
+#include "map.h"
 
 /* Probe related configurations */
 struct probe_conf {
