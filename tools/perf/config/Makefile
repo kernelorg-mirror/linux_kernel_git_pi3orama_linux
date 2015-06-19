@@ -314,6 +314,18 @@ ifndef NO_LIBELF
       CFLAGS += -DHAVE_LIBBPF_SUPPORT
       $(call detected,CONFIG_LIBBPF)
     endif
+
+    ifndef NO_DWARF
+      ifneq ($(origin PERF_HAVE_ARCH_GET_REG_INFO), undefined)
+        CFLAGS += -DHAVE_BPF_PROLOGUE
+        $(call detected,CONFIG_BPF_PROLOGUE)
+      else
+        msg := $(warning BPF prologue is not supported by architecture $(ARCH));
+      endif
+    else
+      msg := $(warning DWARF support is off, BPF prologue is disabled);
+    endif
+
   endif # NO_LIBBPF
 endif # NO_LIBELF
 
