@@ -1235,6 +1235,10 @@ static int add_probe_trace_event(Dwarf_Die *sc_die, struct probe_finder *pf)
 
 end:
 	free(args);
+	if (ret) {
+		tev->nargs = 0;
+		zfree(&tev->args);
+	}
 	return ret;
 }
 
