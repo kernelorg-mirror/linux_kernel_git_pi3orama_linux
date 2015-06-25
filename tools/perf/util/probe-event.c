@@ -2632,7 +2632,7 @@ int add_perf_probe_events(struct perf_probe_event *pevs, int npevs,
 {
 	int i, ret;
 
-	ret = init_symbol_maps(pevs->uprobes);
+	ret = init_symbol_maps(false);
 	if (ret < 0)
 		return ret;
 
