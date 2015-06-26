@@ -1171,6 +1171,12 @@ int cmd_record(int argc, const char **argv, const char *prefix __maybe_unused)
 		goto out_symbol_exit;
 	}
 
+	err = perf_evlist__add_bpf(rec->evlist);
+	if (err < 0) {
+		pr_err("Failed to add events from BPF object(s)\n");
+		goto out_symbol_exit;
+	}
+
 	symbol__init(NULL);
 
 	if (symbol_conf.kptr_restrict)

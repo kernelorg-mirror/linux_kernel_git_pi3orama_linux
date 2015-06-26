@@ -14,6 +14,7 @@
 #include "target.h"
 #include "evlist.h"
 #include "evsel.h"
+#include "bpf-loader.h"
 #include "debug.h"
 #include <unistd.h>
 
@@ -192,6 +193,46 @@ error_free:
 	perf_evsel__delete(evsel);
 error:
 	return -ENOMEM;
+}
+
+static int add_bpf_event(struct probe_trace_event *tev, int fd,
+			 void *arg)
+{
+	struct perf_evlist *evlist = arg;
+	struct perf_evsel *pos;
+	struct list_head list;
+	int err, idx, entries;
+
+	pr_debug("add bpf event %s:%s and attach bpf program %d\n",
+			tev->group, tev->event, fd);
+	INIT_LIST_HEAD(&list);
+	idx = evlist->nr_entries;
+
+	pr_debug("adding %s:%s\n", tev->group, tev->event);
+	err = parse_events_add_tracepoint(&list, &idx, tev->group,
+					  tev->event);
+	if (err) {
+		struct perf_evsel *evsel, *tmp;
+
+		pr_err("Failed to add BPF event %s:%s\n",
+				tev->group, tev->event);
+		list_for_each_entry_safe(evsel, tmp, &list, node) {
+			list_del(&evsel->node);
+			perf_evsel__delete(evsel);
+		}
+		return -EINVAL;
+	}
+
+	list_for_each_entry(pos, &list, node)
+		pos->bpf_fd = fd;
+	entries = idx - evlist->nr_entries;
+	perf_evlist__splice_list_tail(evlist, &list, entries);
+	return 0;
+}
+
+int perf_evlist__add_bpf(struct perf_evlist *evlist)
+{
+	return bpf__foreach_tev(add_bpf_event, evlist);
 }
 
 static int perf_evlist__add_attrs(struct perf_evlist *evlist,

@@ -7,9 +7,13 @@
 
 #include <linux/compiler.h>
 #include <string.h>
+#include "probe-event.h"
 #include "debug.h"
 
 #define PERF_BPF_PROBE_GROUP "perf_bpf_probe"
+
+typedef int (*bpf_prog_iter_callback_t)(struct probe_trace_event *tev,
+					int fd, void *arg);
 
 #ifdef HAVE_LIBBPF_SUPPORT
 int bpf__prepare_load(const char *filename);
@@ -23,6 +27,8 @@ int bpf__load(void);
 int bpf__strerror_load(int err, char *buf, size_t size);
 
 void bpf__clear(void);
+
+int bpf__foreach_tev(bpf_prog_iter_callback_t func, void *arg);
 #else
 static inline int bpf__prepare_load(const char *filename __maybe_unused)
 {
@@ -34,6 +40,13 @@ static inline int bpf__probe(void) { return 0; }
 static inline int bpf__unprobe(void) { return 0; }
 static inline int bpf__load(void) { return 0; }
 static inline void bpf__clear(void) { }
+
+static inline int
+bpf__foreach_tev(bpf_prog_iter_callback_t func __maybe_unused,
+		 void *arg __maybe_unused)
+{
+	return 0;
+}
 
 static inline int
 __bpf_strerror(char *buf, size_t size)
