@@ -66,6 +66,84 @@ bpf_prog_priv__clear(struct bpf_program *prog __maybe_unused,
 }
 
 static int
+do_config(const char *key, const char *value,
+	  struct perf_probe_event *pev)
+{
+	pr_debug("config bpf program: %s=%s\n", key, value);
+	if (strcmp(key, "target") == 0) {
+		pev->uprobes = true;
+		pev->target = strdup(value);
+		return 0;
+	}
+
+	pr_warning("BPF: WARNING: invalid config option in object: %s=%s\n",
+		   key, value);
+	pr_warning("\tHint: Currently only valid option is 'target=<file>'\n");
+	return 0;
+}
+
+static const char *
+parse_config_kvpair(const char *config_str, struct perf_probe_event *pev)
+{
+	char *text = strdup(config_str);
+	char *sep, *line;
+	const char *main_str = NULL;
+	int err = 0;
+
+	if (!text) {
+		pr_debug("No enough memory: dup config_str failed\n");
+		return NULL;
+	}
+
+	line = text;
+	while ((sep = strchr(line, '\n'))) {
+		char *equ;
+
+		*sep = '\0';
+		equ = strchr(line, '=');
+		if (!equ) {
+			pr_warning("WARNING: invalid config in BPF object: %s\n",
+				   line);
+			pr_warning("\tShould be 'key=value'.\n");
+			goto nextline;
+		}
+		*equ = '\0';
+
+		err = do_config(line, equ + 1, pev);
+		if (err)
+			break;
+nextline:
+		line = sep + 1;
+	}
+
+	if (!err)
+		main_str = config_str + (line - text);
+	free(text);
+
+	return main_str;
+}
+
+static int
+parse_config(const char *config_str, struct perf_probe_event *pev)
+{
+	const char *main_str;
+	int err;
+
+	main_str = parse_config_kvpair(config_str, pev);
+	if (!main_str)
+		return -EINVAL;
+
+	err = parse_perf_probe_command(main_str, pev);
+	if (err < 0) {
+		pr_debug("bpf: '%s' is not a valid config string\n",
+			 config_str);
+		/* parse failed, don't need clear pev. */
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int
 config_bpf_program(struct bpf_program *prog, struct perf_probe_event *pev)
 {
 	struct bpf_prog_priv *priv = NULL;
@@ -79,13 +157,9 @@ config_bpf_program(struct bpf_program *prog, struct perf_probe_event *pev)
 	}
 
 	pr_debug("bpf: config program '%s'\n", config_str);
-	err = parse_perf_probe_command(config_str, pev);
-	if (err < 0) {
-		pr_debug("bpf: '%s' is not a valid config string\n",
-			 config_str);
-		/* parse failed, don't need clear pev. */
-		return -EINVAL;
-	}
+	err = parse_config(config_str, pev);
+	if (err)
+		return err;
 
 	if (pev->group && strcmp(pev->group, PERF_BPF_PROBE_GROUP)) {
 		pr_debug("bpf: '%s': group for event is set and not '%s'.\n",
