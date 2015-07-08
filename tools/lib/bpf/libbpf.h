@@ -67,6 +67,28 @@ const char *bpf_program__title(struct bpf_program *prog, bool dup);
 
 int bpf_program__fd(struct bpf_program *prog);
 
+struct bpf_insn;
+struct bpf_prog_prep_result {
+	/*
+	 * If not NULL, load new instruction array.
+	 * If set to NULL, don't load this instance.
+	 */
+	struct bpf_insn *new_insn_ptr;
+	int new_insn_cnt;
+
+	/* If not NULL, result fd is set to it */
+	int *pfd;
+};
+
+typedef int (*bpf_program_prep_t)(struct bpf_program *, int n,
+				  struct bpf_insn *, int insn_cnt,
+				  struct bpf_prog_prep_result *res);
+
+int bpf_program__set_prep(struct bpf_program *prog, int nr_instance,
+			  bpf_program_prep_t prep);
+
+int bpf_program__nth_fd(struct bpf_program *prog, int n);
+
 /*
  * We don't need __attribute__((packed)) now since it is
  * unnecessary for 'bpf_map_def' because they are all aligned.
