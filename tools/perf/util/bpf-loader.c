@@ -5,10 +5,13 @@
  * Copyright (C) 2015 Huawei Inc.
  */
 
+#include <linux/bpf.h>
 #include <bpf/libbpf.h>
 #include "perf.h"
 #include "debug.h"
 #include "bpf-loader.h"
+#include "bpf-prologue.h"
+#include "llvm-utils.h"
 #include "probe-event.h"
 #include "probe-finder.h"
 #include "llvm-utils.h"
@@ -42,6 +45,8 @@ struct bpf_prog_priv {
 		struct perf_probe_event *ppev;
 		struct perf_probe_event pev;
 	};
+	bool need_prologue;
+	struct bpf_insn *insns_buf;
 };
 
 static void
@@ -53,6 +58,7 @@ bpf_prog_priv__clear(struct bpf_program *prog __maybe_unused,
 	/* check if pev is initialized */
 	if (priv && priv->pev_ready)
 		clear_perf_probe_event(&priv->pev);
+	zfree(&priv->insns_buf);
 	free(priv);
 }
 
@@ -238,6 +244,103 @@ int bpf__unprobe(void)
 	return ret < 0 ? ret : 0;
 }
 
+static int
+preproc_gen_prologue(struct bpf_program *prog, int n,
+		     struct bpf_insn *orig_insns, int orig_insns_cnt,
+		     struct bpf_prog_prep_result *res)
+{
+	struct probe_trace_event *tev;
+	struct perf_probe_event *pev;
+	struct bpf_prog_priv *priv;
+	struct bpf_insn *buf;
+	size_t prologue_cnt = 0;
+	int err;
+
+	err = bpf_program__get_private(prog, (void **)&priv);
+	if (err || !priv || !priv->pev_ready)
+		goto errout;
+
+	pev = &priv->pev;
+
+	if (n < 0 || n >= pev->ntevs)
+		goto errout;
+
+	tev = &pev->tevs[n];
+
+	buf = priv->insns_buf;
+	err = bpf__gen_prologue(tev->args, tev->nargs,
+				buf, &prologue_cnt,
+				BPF_MAXINSNS - orig_insns_cnt);
+	if (err) {
+		const char *title;
+
+		title = bpf_program__title(prog, false);
+		if (!title)
+			title = "??";
+
+		pr_debug("Failed to generate prologue for program %s\n",
+			 title);
+		return err;
+	}
+
+	memcpy(&buf[prologue_cnt], orig_insns,
+	       sizeof(struct bpf_insn) * orig_insns_cnt);
+
+	res->new_insn_ptr = buf;
+	res->new_insn_cnt = prologue_cnt + orig_insns_cnt;
+	res->pfd = NULL;
+	return 0;
+
+errout:
+	pr_debug("Internal error in preproc_gen_prologue\n");
+	return -EINVAL;
+}
+
+static int hook_load_preprocessor(struct bpf_program *prog)
+{
+	struct perf_probe_event *pev;
+	struct bpf_prog_priv *priv;
+	bool need_prologue = false;
+	int err, i;
+
+	err = bpf_program__get_private(prog, (void **)&priv);
+	if (err || !priv) {
+		pr_debug("Internal error when hook preprocessor\n");
+		return -EINVAL;
+	}
+
+	pev = &priv->pev;
+	for (i = 0; i < pev->ntevs; i++) {
+		struct probe_trace_event *tev = &pev->tevs[i];
+
+		if (tev->nargs > 0) {
+			need_prologue = true;
+			break;
+		}
+	}
+
+	/*
+	 * Since all tev doesn't have argument, we don't need generate
+	 * prologue.
+	 */
+	if (!need_prologue) {
+		priv->need_prologue = false;
+		return 0;
+	}
+
+	priv->need_prologue = true;
+	priv->insns_buf = malloc(sizeof(struct bpf_insn) *
+					BPF_MAXINSNS);
+	if (!priv->insns_buf) {
+		pr_debug("No enough memory: alloc insns_buf failed\n");
+		return -ENOMEM;
+	}
+
+	err = bpf_program__set_prep(prog, pev->ntevs,
+				    preproc_gen_prologue);
+	return err;
+}
+
 int bpf__probe(void)
 {
 	int err, nr_events = 0;
@@ -286,6 +389,17 @@ int bpf__probe(void)
 	bpf_object__for_each_safe(obj, tmp) {
 		bpf_object__for_each_program(prog, obj) {
 			err = sync_bpf_program_pev(prog);
+			if (err)
+				goto out;
+			/*
+			 * After probing, let's consider prologue, which
+			 * adds program fetcher to BPF programs.
+			 *
+			 * hook_load_preprocessorr() hooks pre-processor
+			 * to bpf_program, let it generate prologue
+			 * dynamically during loading.
+			 */
+			err = hook_load_preprocessor(prog);
 			if (err)
 				goto out;
 		}
@@ -342,7 +456,11 @@ int bpf__foreach_tev(bpf_prog_iter_callback_t func, void *arg)
 			for (i = 0; i < pev->ntevs; i++) {
 				tev = &pev->tevs[i];
 
-				fd = bpf_program__fd(prog);
+				if (priv->need_prologue)
+					fd = bpf_program__nth_fd(prog, i);
+				else
+					fd = bpf_program__fd(prog);
+
 				if (fd < 0) {
 					pr_debug("bpf: failed to get file descriptor\n");
 					return fd;
