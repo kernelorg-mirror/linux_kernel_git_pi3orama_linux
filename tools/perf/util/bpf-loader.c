@@ -37,6 +37,8 @@ struct bpf_prog_priv {
 	struct perf_probe_event pev;
 	bool need_prologue;
 	struct bpf_insn *insns_buf;
+	int nr_types;
+	int *type_mapping;
 };
 
 struct bpf_object *
@@ -104,6 +106,7 @@ bpf_prog_priv__clear(struct bpf_program *prog __maybe_unused,
 
 	cleanup_perf_probe_events(&priv->pev, 1);
 	zfree(&priv->insns_buf);
+	zfree(&priv->type_mapping);
 	free(priv);
 }
 
@@ -205,7 +208,7 @@ preproc_gen_prologue(struct bpf_program *prog, int n,
 	struct bpf_prog_priv *priv;
 	struct bpf_insn *buf;
 	size_t prologue_cnt = 0;
-	int err;
+	int i, err;
 
 	err = bpf_program__get_private(prog, (void **)&priv);
 	if (err || !priv)
@@ -213,10 +216,20 @@ preproc_gen_prologue(struct bpf_program *prog, int n,
 
 	pev = &priv->pev;
 
-	if (n < 0 || n >= pev->ntevs)
+	if (n < 0 || n >= priv->nr_types)
 		goto errout;
 
-	tev = &pev->tevs[n];
+	/* Find a tev belongs to that type */
+	for (i = 0; i < pev->ntevs; i++)
+		if (priv->type_mapping[i] == n)
+			break;
+
+	if (i >= pev->ntevs) {
+		pr_debug("Internal error: prologue type %d not found\n", n);
+		return -ENOENT;
+	}
+
+	tev = &pev->tevs[i];
 
 	buf = priv->insns_buf;
 	err = bpf__gen_prologue(tev->args, tev->nargs,
@@ -245,6 +258,98 @@ preproc_gen_prologue(struct bpf_program *prog, int n,
 errout:
 	pr_debug("Internal error in preproc_gen_prologue\n");
 	return -EINVAL;
+}
+
+/*
+ * compare_tev_args is reflexive, transitive and antisymmetric.
+ * I can show that but this margin is too narrow to contain.
+ */
+static int compare_tev_args(const void *ptev1, const void *ptev2)
+{
+	int i, ret;
+	const struct probe_trace_event *tev1 =
+		*(const struct probe_trace_event **)ptev1;
+	const struct probe_trace_event *tev2 =
+		*(const struct probe_trace_event **)ptev2;
+
+	ret = tev2->nargs - tev1->nargs;
+	if (ret)
+		return ret;
+
+	for (i = 0; i < tev1->nargs; i++) {
+		struct probe_trace_arg *arg1, *arg2;
+		struct probe_trace_arg_ref *ref1, *ref2;
+
+		arg1 = &tev1->args[i];
+		arg2 = &tev2->args[i];
+
+		ret = strcmp(arg1->value, arg2->value);
+		if (ret)
+			return ret;
+
+		ref1 = arg1->ref;
+		ref2 = arg2->ref;
+
+		while (ref1 && ref2) {
+			ret = ref2->offset - ref1->offset;
+			if (ret)
+				return ret;
+
+			ref1 = ref1->next;
+			ref2 = ref2->next;
+		}
+
+		if (ref1 || ref2)
+			return ref2 ? 1 : -1;
+	}
+
+	return 0;
+}
+
+static int map_prologue(struct perf_probe_event *pev, int *mapping,
+			int *nr_types)
+{
+	int i, type = 0;
+	struct {
+		struct probe_trace_event *tev;
+		int idx;
+	} *stevs;
+	size_t array_sz = sizeof(*stevs) * pev->ntevs;
+
+	stevs = malloc(array_sz);
+	if (!stevs) {
+		pr_debug("No ehough memory: alloc stevs failed\n");
+		return -ENOMEM;
+	}
+
+	pr_debug("In map_prologue, ntevs=%d\n", pev->ntevs);
+	for (i = 0; i < pev->ntevs; i++) {
+		stevs[i].tev = &pev->tevs[i];
+		stevs[i].idx = i;
+	}
+	qsort(stevs, pev->ntevs, sizeof(*stevs),
+	      compare_tev_args);
+
+	for (i = 0; i < pev->ntevs; i++) {
+		if (i == 0) {
+			mapping[stevs[i].idx] = type;
+			pr_debug("mapping[%d]=%d\n", stevs[i].idx,
+				 type);
+			continue;
+		}
+
+		if (compare_tev_args(stevs + i, stevs + i - 1) == 0)
+			mapping[stevs[i].idx] = type;
+		else
+			mapping[stevs[i].idx] = ++type;
+
+		pr_debug("mapping[%d]=%d\n", stevs[i].idx,
+			 mapping[stevs[i].idx]);
+	}
+	free(stevs);
+	*nr_types = type + 1;
+
+	return 0;
 }
 
 static int hook_load_preprocessor(struct bpf_program *prog)
@@ -286,7 +391,19 @@ static int hook_load_preprocessor(struct bpf_program *prog)
 		return -ENOMEM;
 	}
 
-	err = bpf_program__set_prep(prog, pev->ntevs,
+	priv->type_mapping = malloc(sizeof(int) * pev->ntevs);
+	if (!priv->type_mapping) {
+		pr_debug("No enough memory: alloc type_mapping failed\n");
+		return -ENOMEM;
+	}
+	memset(priv->type_mapping, 0xff,
+	       sizeof(int) * pev->ntevs);
+
+	err = map_prologue(pev, priv->type_mapping, &priv->nr_types);
+	if (err)
+		return err;
+
+	err = bpf_program__set_prep(prog, priv->nr_types,
 				    preproc_gen_prologue);
 	return err;
 }
@@ -420,9 +537,11 @@ int bpf__foreach_tev(struct bpf_object *obj,
 		for (i = 0; i < pev->ntevs; i++) {
 			tev = &pev->tevs[i];
 
-			if (priv->need_prologue)
-				fd = bpf_program__nth_fd(prog, i);
-			else
+			if (priv->need_prologue) {
+				int type = priv->type_mapping[i];
+
+				fd = bpf_program__nth_fd(prog, type);
+			} else
 				fd = bpf_program__fd(prog);
 
 			if (fd < 0) {
