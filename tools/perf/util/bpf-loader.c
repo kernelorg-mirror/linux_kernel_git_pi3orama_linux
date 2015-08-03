@@ -188,6 +188,7 @@ static bool is_probed;
 int bpf__unprobe(void)
 {
 	struct strfilter *delfilter;
+	bool old_silent = probe_conf.silent;
 	int ret;
 
 	if (!is_probed)
@@ -199,7 +200,9 @@ int bpf__unprobe(void)
 		return -ENOMEM;
 	}
 
+	probe_conf.silent = true;
 	ret = del_perf_probe_events(delfilter);
+	probe_conf.silent = old_silent;
 	strfilter__delete(delfilter);
 	if (ret < 0 && is_probed)
 		pr_debug("Error: failed to delete events: %s\n",
@@ -215,6 +218,7 @@ int bpf__probe(void)
 	struct bpf_object *obj, *tmp;
 	struct bpf_program *prog;
 	struct perf_probe_event *pevs;
+	bool old_silent = probe_conf.silent;
 
 	pevs = calloc(MAX_PROBES, sizeof(pevs[0]));
 	if (!pevs)
@@ -235,9 +239,11 @@ int bpf__probe(void)
 		}
 	}
 
+	probe_conf.silent = true;
 	probe_conf.max_probes = MAX_PROBES;
 	/* Let add_perf_probe_events generates probe_trace_event (tevs) */
 	err = add_perf_probe_events(pevs, nr_events, false);
+	probe_conf.silent = old_silent;
 
 	/* add_perf_probe_events return negative when fail */
 	if (err < 0) {

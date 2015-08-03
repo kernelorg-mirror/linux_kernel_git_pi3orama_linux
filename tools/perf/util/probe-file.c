@@ -267,7 +267,10 @@ static int __del_trace_probe_event(int fd, struct str_node *ent)
 		goto error;
 	}
 
-	pr_info("Removed event: %s\n", ent->s);
+	if (!probe_conf.silent)
+		pr_info("Removed event: %s\n", ent->s);
+	else
+		pr_debug("Removed event: %s\n", ent->s);
 	return 0;
 error:
 	pr_warning("Failed to delete event: %s\n",

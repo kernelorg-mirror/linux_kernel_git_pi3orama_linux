@@ -13,6 +13,7 @@ struct probe_conf {
 	bool	force_add;
 	bool	no_inlines;
 	int	max_probes;
+	bool	silent;
 };
 extern struct probe_conf probe_conf;
 extern bool probe_event_dry_run;

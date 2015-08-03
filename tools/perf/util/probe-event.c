@@ -52,7 +52,9 @@
 #define PERFPROBE_GROUP "probe"
 
 bool probe_event_dry_run;	/* Dry run flag */
-struct probe_conf probe_conf;
+struct probe_conf probe_conf = {
+	.silent = false,
+};
 
 #define semantic_error(msg ...) pr_err("Semantic error :" msg)
 
@@ -2133,10 +2135,12 @@ static int show_perf_probe_event(const char *group, const char *event,
 
 	ret = perf_probe_event__sprintf(group, event, pev, module, &buf);
 	if (ret >= 0) {
-		if (use_stdout)
+		if (use_stdout && !probe_conf.silent)
 			printf("%s\n", buf.buf);
-		else
+		else if (!probe_conf.silent)
 			pr_info("%s\n", buf.buf);
+		else
+			pr_debug("%s\n", buf.buf);
 	}
 	strbuf_release(&buf);
 
@@ -2357,7 +2361,10 @@ static int __add_probe_trace_events(struct perf_probe_event *pev,
 	}
 
 	ret = 0;
-	pr_info("Added new event%s\n", (ntevs > 1) ? "s:" : ":");
+	if (!probe_conf.silent)
+		pr_info("Added new event%s\n", (ntevs > 1) ? "s:" : ":");
+	else
+		pr_debug("Added new event%s\n", (ntevs > 1) ? "s:" : ":");
 	for (i = 0; i < ntevs; i++) {
 		tev = &tevs[i];
 		/* Skip if the symbol is out of .text or blacklisted */
@@ -2393,7 +2400,7 @@ static int __add_probe_trace_events(struct perf_probe_event *pev,
 		warn_uprobe_event_compat(tev);
 
 	/* Note that it is possible to skip all events because of blacklist */
-	if (ret >= 0 && event) {
+	if (ret >= 0 && event && !probe_conf.silent) {
 		/* Show how to use the event. */
 		pr_info("\nYou can now use it in all perf tools, such as:\n\n");
 		pr_info("\tperf record -e %s:%s -aR sleep 1\n\n", group, event);
