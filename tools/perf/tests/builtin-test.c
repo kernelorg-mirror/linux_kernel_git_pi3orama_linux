@@ -17,6 +17,8 @@
 static struct test {
 	const char *desc;
 	int (*func)(void);
+	void (*prepare)(void);
+	void (*cleanup)(void);
 } tests[] = {
 	{
 		.desc = "vmlinux symtab matches kallsyms",
@@ -177,6 +179,8 @@ static struct test {
 	{
 		.desc = "Test LLVM searching and compiling",
 		.func = test__llvm,
+		.prepare = test__llvm_prepare,
+		.cleanup = test__llvm_cleanup,
 	},
 	{
 		.func = NULL,
@@ -265,7 +269,11 @@ static int __cmd_test(int argc, const char *argv[], struct intlist *skiplist)
 		}
 
 		pr_debug("\n--- start ---\n");
+		if (tests[curr].prepare)
+			tests[curr].prepare();
 		err = run_test(&tests[curr]);
+		if (tests[curr].cleanup)
+			tests[curr].cleanup();
 		pr_debug("---- end ----\n%s:", tests[curr].desc);
 
 		switch (err) {
