@@ -30,9 +30,35 @@ DEFINE_PRINT_FN(debug, 1)
 
 static bool libbpf_initialized;
 
+struct bpf_prog_priv {
+	/*
+	 * If pev_ready is false, ppev pointes to a local memory which
+	 * is only valid inside bpf__probe().
+	 * pev is valid only when pev_ready.
+	 */
+	bool pev_ready;
+	union {
+		struct perf_probe_event *ppev;
+		struct perf_probe_event pev;
+	};
+};
+
+static void
+bpf_prog_priv__clear(struct bpf_program *prog __maybe_unused,
+			  void *_priv)
+{
+	struct bpf_prog_priv *priv = _priv;
+
+	/* check if pev is initialized */
+	if (priv && priv->pev_ready)
+		clear_perf_probe_event(&priv->pev);
+	free(priv);
+}
+
 static int
 config_bpf_program(struct bpf_program *prog, struct perf_probe_event *pev)
 {
+	struct bpf_prog_priv *priv = NULL;
 	const char *config_str;
 	int err;
 
@@ -74,12 +100,56 @@ config_bpf_program(struct bpf_program *prog, struct perf_probe_event *pev)
 
 	pr_debug("bpf: config '%s' is ok\n", config_str);
 
+	priv = calloc(1, sizeof(*priv));
+	if (!priv) {
+		pr_debug("bpf: failed to alloc memory\n");
+		err = -ENOMEM;
+		goto errout;
+	}
+
+	/*
+	 * At this very early stage, tevs inside pev are not ready.
+	 * It becomes usable after add_perf_probe_events() is called.
+	 * set pev_ready to false so further access read priv->ppev
+	 * only.
+	 */
+	priv->pev_ready = false;
+	priv->ppev = pev;
+
+	err = bpf_program__set_private(prog, priv,
+				       bpf_prog_priv__clear);
+	if (err) {
+		pr_debug("bpf: set program private failed\n");
+		err = -ENOMEM;
+		goto errout;
+	}
 	return 0;
 
 errout:
 	if (pev)
 		clear_perf_probe_event(pev);
+	if (priv)
+		free(priv);
 	return err;
+}
+
+static int
+sync_bpf_program_pev(struct bpf_program *prog)
+{
+	int err;
+	struct bpf_prog_priv *priv;
+	struct perf_probe_event *ppev;
+
+	err = bpf_program__get_private(prog, (void **)&priv);
+	if (err || !priv || priv->pev_ready) {
+		pr_debug("Internal error: sync_bpf_program_pev\n");
+		return -EINVAL;
+	}
+
+	ppev = priv->ppev;
+	memcpy(&priv->pev, ppev, sizeof(*ppev));
+	priv->pev_ready = true;
+	return 0;
 }
 
 int bpf__prepare_load(const char *filename)
@@ -172,11 +242,27 @@ int bpf__probe(void)
 	/* add_perf_probe_events return negative when fail */
 	if (err < 0) {
 		pr_debug("bpf probe: failed to probe events\n");
+		goto out;
 	} else
 		is_probed = true;
+
+	/*
+	 * After add_perf_probe_events, 'struct perf_probe_event' is ready.
+	 * Until now copying program's priv->pev field and freeing
+	 * the big array allocated before become safe.
+	 */
+	bpf_object__for_each_safe(obj, tmp) {
+		bpf_object__for_each_program(prog, obj) {
+			err = sync_bpf_program_pev(prog);
+			if (err)
+				goto out;
+		}
+	}
 out:
-	while (nr_events > 0)
-		clear_perf_probe_event(&pevs[--nr_events]);
+	/*
+	 * Don't call clear_perf_probe_event() for entries of pevs:
+	 * they are used by prog's private field.
+	 */
 	free(pevs);
 	return err < 0 ? err : 0;
 }
