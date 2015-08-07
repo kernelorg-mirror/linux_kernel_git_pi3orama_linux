@@ -29,6 +29,7 @@
 #include "util/data.h"
 #include "util/auxtrace.h"
 #include "util/parse-branch-options.h"
+#include "util/bpf-loader.h"
 
 #include <unistd.h>
 #include <sched.h>
@@ -1137,7 +1138,23 @@ int cmd_record(int argc, const char **argv, const char *prefix __maybe_unused)
 	if (err)
 		return err;
 
-	err = -ENOMEM;
+	/*
+	 * bpf__probe must be called before symbol__init() because we
+	 * need init_symbol_maps. If called after symbol__init,
+	 * symbol_conf.sort_by_name won't take effect.
+	 *
+	 * bpf__unprobe() is safe even if bpf__probe() failed, and it
+	 * also calls symbol__init. Therefore, goto out_symbol_exit
+	 * is safe when probe failed.
+	 */
+	err = bpf__probe();
+	if (err) {
+		bpf__strerror_probe(err, errbuf, sizeof(errbuf));
+
+		pr_err("Probing at events in BPF object failed.\n");
+		pr_err("\t%s\n", errbuf);
+		goto out_symbol_exit;
+	}
 
 	symbol__init(NULL);
 
@@ -1198,6 +1215,7 @@ out_symbol_exit:
 	perf_evlist__delete(rec->evlist);
 	symbol__exit();
 	auxtrace_record__free(rec->itr);
+	bpf__unprobe();
 	return err;
 }
 
