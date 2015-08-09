@@ -19,6 +19,7 @@
 #include "thread_map.h"
 #include "cpumap.h"
 #include "asm/bug.h"
+#include "bpf-loader.h"
 
 #define MAX_NAME_LEN 100
 
@@ -479,6 +480,31 @@ int parse_events_add_tracepoint(struct list_head *list, int *idx,
 		return add_tracepoint_multi_sys(list, idx, sys, event);
 	else
 		return add_tracepoint_event(list, idx, sys, event);
+}
+
+int parse_events_load_bpf(struct parse_events_evlist *data,
+			  struct list_head *list __maybe_unused,
+			  char *bpf_file_name)
+{
+	int err;
+	char errbuf[BUFSIZ];
+
+	/*
+	 * Currently don't link any event to list. BPF object files
+	 * should be saved to a seprated list and processed together.
+	 *
+	 * Things could be changed if we solve perf probe reentering
+	 * problem. After that probe events file by file is possible.
+	 * However, probing cost is still need to be considered.
+	 */
+	err = bpf__prepare_load(bpf_file_name);
+	if (err) {
+		bpf__strerror_prepare_load(bpf_file_name, err,
+					   errbuf, sizeof(errbuf));
+		data->error->str = strdup(errbuf);
+		data->error->help = strdup("(add -v to see detail)");
+	}
+	return err;
 }
 
 static int

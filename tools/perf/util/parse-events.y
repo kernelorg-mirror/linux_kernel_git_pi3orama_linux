@@ -42,6 +42,7 @@ static inc_group_count(struct list_head *list,
 %token PE_VALUE PE_VALUE_SYM_HW PE_VALUE_SYM_SW PE_RAW PE_TERM
 %token PE_EVENT_NAME
 %token PE_NAME
+%token PE_BPF_OBJECT
 %token PE_MODIFIER_EVENT PE_MODIFIER_BP
 %token PE_NAME_CACHE_TYPE PE_NAME_CACHE_OP_RESULT
 %token PE_PREFIX_MEM PE_PREFIX_RAW PE_PREFIX_GROUP
@@ -53,6 +54,7 @@ static inc_group_count(struct list_head *list,
 %type <num> PE_RAW
 %type <num> PE_TERM
 %type <str> PE_NAME
+%type <str> PE_BPF_OBJECT
 %type <str> PE_NAME_CACHE_TYPE
 %type <str> PE_NAME_CACHE_OP_RESULT
 %type <str> PE_MODIFIER_EVENT
@@ -69,6 +71,7 @@ static inc_group_count(struct list_head *list,
 %type <head> event_legacy_tracepoint
 %type <head> event_legacy_numeric
 %type <head> event_legacy_raw
+%type <head> event_bpf_file
 %type <head> event_def
 %type <head> event_mod
 %type <head> event_name
@@ -198,7 +201,8 @@ event_def: event_pmu |
 	   event_legacy_mem |
 	   event_legacy_tracepoint sep_dc |
 	   event_legacy_numeric sep_dc |
-	   event_legacy_raw sep_dc
+	   event_legacy_raw sep_dc |
+	   event_bpf_file
 
 event_pmu:
 PE_NAME '/' event_config '/'
@@ -419,6 +423,18 @@ PE_RAW
 	ABORT_ON(parse_events_add_numeric(data, list, PERF_TYPE_RAW, $1, NULL));
 	$$ = list;
 }
+
+event_bpf_file:
+PE_BPF_OBJECT
+{
+	struct parse_events_evlist *data = _data;
+	struct list_head *list;
+
+	ALLOC_LIST(list);
+	ABORT_ON(parse_events_load_bpf(data, list, $1));
+	$$ = list;
+}
+
 
 start_terms: event_config
 {
