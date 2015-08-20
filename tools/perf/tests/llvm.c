@@ -174,3 +174,22 @@ void test__llvm_cleanup(void)
 			(~((unsigned long)page_size - 1));
 	munmap((void *)boundary, buf_end - boundary);
 }
+
+void
+test_llvm__fetch_bpf_obj(void **p_obj_buf, size_t *p_obj_buf_sz)
+{
+	*p_obj_buf = NULL;
+	*p_obj_buf_sz = 0;
+
+	if (!p_test_llvm__bpf_result) {
+		test__llvm_prepare();
+		test__llvm();
+		test__llvm_cleanup();
+	}
+
+	if (!p_test_llvm__bpf_result)
+		return;
+
+	*p_obj_buf = p_test_llvm__bpf_result->object;
+	*p_obj_buf_sz = p_test_llvm__bpf_result->size;
+}

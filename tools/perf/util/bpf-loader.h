@@ -17,6 +17,7 @@ typedef int (*bpf_prog_iter_callback_t)(struct probe_trace_event *tev,
 
 #ifdef HAVE_LIBBPF_SUPPORT
 int bpf__prepare_load(const char *filename, bool source);
+int bpf__prepare_load_buffer(void *obj_buf, size_t obj_buf_sz);
 int bpf__strerror_prepare_load(const char *filename, bool source,
 			       int err, char *buf, size_t size);
 int bpf__probe(void);
@@ -35,6 +36,12 @@ static inline int bpf__prepare_load(const char *filename __maybe_unused,
 {
 	pr_debug("ERROR: eBPF object loading is disabled during compiling.\n");
 	return -1;
+}
+
+static inline int bpf__prepare_load_buffer(void *obj_buf __maybe_unused,
+					   size_t obj_buf_sz __maybe_unused)
+{
+	return bpf__prepare_load(NULL, false);
 }
 
 static inline int bpf__probe(void) { return 0; }

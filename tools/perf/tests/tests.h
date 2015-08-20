@@ -65,6 +65,7 @@ int test__thread_map(void);
 int test__llvm(void);
 void test__llvm_prepare(void);
 void test__llvm_cleanup(void);
+int test__bpf(void);
 
 #if defined(__x86_64__) || defined(__i386__) || defined(__arm__) || defined(__aarch64__)
 #ifdef HAVE_DWARF_UNWIND_SUPPORT

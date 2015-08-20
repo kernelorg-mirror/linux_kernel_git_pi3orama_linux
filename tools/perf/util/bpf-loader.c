@@ -153,6 +153,19 @@ sync_bpf_program_pev(struct bpf_program *prog)
 	return 0;
 }
 
+int bpf__prepare_load_buffer(void *obj_buf, size_t obj_buf_sz)
+{
+	struct bpf_object *obj;
+
+	obj = bpf_object__open_buffer(obj_buf, obj_buf_sz);
+	if (!obj) {
+		pr_debug("bpf: failed to load buffer\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 int bpf__prepare_load(const char *filename, bool source)
 {
 	struct bpf_object *obj;

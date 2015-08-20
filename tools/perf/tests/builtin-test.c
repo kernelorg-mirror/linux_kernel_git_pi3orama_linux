@@ -183,6 +183,10 @@ static struct test {
 		.cleanup = test__llvm_cleanup,
 	},
 	{
+		.desc = "Test BPF filter",
+		.func = test__bpf,
+	},
+	{
 		.func = NULL,
 	},
 };
