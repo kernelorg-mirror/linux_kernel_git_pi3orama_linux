@@ -160,6 +160,8 @@ static struct test generic_tests[] = {
 	{
 		.desc = "Test LLVM searching and compiling",
 		.func = test__llvm,
+		.prepare = test__llvm_prepare,
+		.cleanup = test__llvm_cleanup,
 	},
 	{
 		.desc = "Test topology in session",
@@ -261,7 +263,11 @@ static int __cmd_test(int argc, const char *argv[], struct intlist *skiplist)
 		}
 
 		pr_debug("\n--- start ---\n");
+		if (t->prepare)
+			t->prepare();
 		err = run_test(t);
+		if (t->cleanup)
+			t->cleanup();
 		pr_debug("---- end ----\n%s:", t->desc);
 
 		switch (err) {
