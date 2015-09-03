@@ -140,7 +140,8 @@ int test__bpf(void)
 		return TEST_SKIP;
 	}
 
-	test_llvm__fetch_bpf_obj(&obj_buf, &obj_buf_sz);
+	test_llvm__fetch_bpf_obj(&obj_buf, &obj_buf_sz, LLVM_TESTCASE_BASE);
+
 	if (!obj_buf || !obj_buf_sz) {
 		if (verbose == 0)
 			fprintf(stderr, " (fix 'perf test LLVM' first)");
