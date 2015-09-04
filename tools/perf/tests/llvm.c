@@ -22,6 +22,11 @@ struct llvm_testcase {
 	[LLVM_TESTCASE_KBUILD]	= {.source = test_llvm__bpf_test_kbuild_prog,
 				   .errmsg = "llvm.kbuild-dir can be fixed",
 				   .tried = false},
+	/* Don't output if this one fail. */
+	[LLVM_TESTCASE_BPF_PROLOGUE]	= {
+				   .source = test_llvm__bpf_test_prologue_prog,
+				   .errmsg = "failed for unknown reason",
+				   .tried = false},
 	{.source = NULL}
 };
 
