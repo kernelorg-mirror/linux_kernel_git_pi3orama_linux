@@ -541,6 +541,7 @@ static int add_bpf_event(struct probe_trace_event *tev, int fd,
 	struct __add_bpf_event_param *param = _param;
 	struct parse_events_evlist *evlist = param->data;
 	struct list_head *list = param->list;
+	struct perf_evsel *pos;
 	int err;
 
 	pr_debug("add bpf event %s:%s and attach bpf program %d\n",
@@ -560,6 +561,9 @@ static int add_bpf_event(struct probe_trace_event *tev, int fd,
 		return err;
 	}
 	pr_debug("adding %s:%s\n", tev->group, tev->event);
+
+	list_for_each_entry(pos, list, node)
+		pos->bpf_fd = fd;
 	return 0;
 }
 
