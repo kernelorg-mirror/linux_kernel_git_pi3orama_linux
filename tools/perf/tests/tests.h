@@ -70,6 +70,7 @@ int test__thread_map(void);
 int test__llvm(void);
 void test__llvm_prepare(void);
 void test__llvm_cleanup(void);
+int test__bpf(void);
 int test_session_topology(void);
 
 #if defined(__arm__) || defined(__aarch64__)

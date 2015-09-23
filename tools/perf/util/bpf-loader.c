@@ -34,6 +34,20 @@ struct bpf_prog_priv {
 	struct perf_probe_event pev;
 };
 
+struct bpf_object *
+bpf__prepare_load_buffer(void *obj_buf, size_t obj_buf_sz, const char *name)
+{
+	struct bpf_object *obj;
+
+	obj = bpf_object__open_buffer(obj_buf, obj_buf_sz, name);
+	if (!obj) {
+		pr_debug("bpf: failed to load buffer\n");
+		return ERR_PTR(-EINVAL);
+	}
+
+	return obj;
+}
+
 struct bpf_object *bpf__prepare_load(const char *filename, bool source)
 {
 	struct bpf_object *obj;
