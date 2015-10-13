@@ -1731,9 +1731,9 @@ perf_evlist__find_evsel_by_str(struct perf_evlist *evlist,
 	struct perf_evsel *evsel;
 
 	evlist__for_each(evlist, evsel) {
-		if (!evsel->name)
+		if (!evsel->alias)
 			continue;
-		if (strcmp(str, evsel->name) == 0)
+		if (strcmp(str, evsel->alias) == 0)
 			return evsel;
 	}
 

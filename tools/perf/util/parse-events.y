@@ -77,6 +77,7 @@ static inc_group_count(struct list_head *list,
 %type <head> event_bpf_file
 %type <head> event_def
 %type <head> event_mod
+%type <head> event_alias
 %type <head> event_name
 %type <head> event
 %type <head> events
@@ -193,11 +194,23 @@ event_name PE_MODIFIER_EVENT
 event_name
 
 event_name:
-PE_EVENT_NAME event_def
+PE_EVENT_NAME event_alias
 {
 	ABORT_ON(parse_events_name($2, $1));
 	free($1);
 	$$ = $2;
+}
+|
+event_alias
+
+event_alias:
+PE_NAME '=' event_def
+{
+	struct list_head *list = $3;
+	struct parse_events_evlist *data = _data;
+
+	ABORT_ON(parse_events__set_event_alias(data, list, $1, &@1));
+	$$ = list;
 }
 |
 event_def

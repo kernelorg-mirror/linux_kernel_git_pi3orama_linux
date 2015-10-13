@@ -1091,6 +1091,30 @@ int parse_events__modifier_group(struct list_head *list,
 	return parse_events__modifier_event(list, event_mod, true);
 }
 
+int parse_events__set_event_alias(struct parse_events_evlist *data,
+				  struct list_head *list,
+				  const char *str,
+				  void *loc_alias_)
+{
+	struct perf_evsel *evsel;
+	YYLTYPE *loc_alias = loc_alias_;
+
+	if (!str)
+		return 0;
+
+	if (!list_is_singular(list)) {
+		struct parse_events_error *err = data->error;
+
+		err->idx = loc_alias->first_column;
+		err->str = strdup("One alias can be applied to one event only");
+		return -EINVAL;
+	}
+
+	evsel = list_first_entry(list, struct perf_evsel, node);
+	evsel->alias = strdup(str);
+	return evsel->alias ? 0 : -ENOMEM;
+}
+
 void parse_events__set_leader(char *name, struct list_head *list)
 {
 	struct perf_evsel *leader;
@@ -1283,6 +1307,8 @@ int parse_events_name(struct list_head *list, char *name)
 	__evlist__for_each(list, evsel) {
 		if (!evsel->name)
 			evsel->name = strdup(name);
+		if (!evsel->alias)
+			evsel->alias = strdup(name);
 	}
 
 	return 0;

@@ -1076,6 +1076,7 @@ void perf_evsel__exit(struct perf_evsel *evsel)
 	thread_map__put(evsel->threads);
 	zfree(&evsel->group_name);
 	zfree(&evsel->name);
+	zfree(&evsel->alias);
 	perf_evsel__object.fini(evsel);
 }
 
