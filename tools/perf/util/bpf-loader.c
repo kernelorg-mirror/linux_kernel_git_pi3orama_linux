@@ -1448,7 +1448,7 @@ int bpf__strerror_apply_obj_config(int err, char *buf, size_t size)
 	bpf__strerror_entry(BPF_LOADER_ERRNO__OBJCONF_MAP_EVTDIM,
 			    "Cannot set event to BPF maps in multi-thread tracing");
 	bpf__strerror_entry(BPF_LOADER_ERRNO__OBJCONF_MAP_EVTINH,
-			    "%s (Hint: use -i to turn off inherit)", emsg);
+			    "%s (Hint: use -i or use /no-inherit/ to turn off inherit)", emsg);
 	bpf__strerror_entry(BPF_LOADER_ERRNO__OBJCONF_MAP_EVTTYPE,
 			    "Can only put raw, hardware and BPF output event into a BPF map");
 	bpf__strerror_end(buf, size);
