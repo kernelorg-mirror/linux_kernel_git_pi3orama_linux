@@ -742,6 +742,7 @@ int bpf__foreach_tev(struct bpf_object *obj,
 
 enum bpf_map_op_type {
 	BPF_MAP_OP_SET_VALUE,
+	BPF_MAP_OP_SET_EVSEL,
 };
 
 enum bpf_map_key_type {
@@ -754,6 +755,7 @@ struct bpf_map_op {
 	enum bpf_map_key_type key_type;
 	union {
 		u64 value;
+		struct perf_evsel *evsel;
 	} v;
 };
 
@@ -891,9 +893,72 @@ bpf__obj_config_map_value(struct bpf_map *map,
 	if (term->type_val == PARSE_EVENTS__TERM_TYPE_NUM)
 		return bpf__obj_config_map_array_value(map, term);
 
-	pr_debug("ERROR: wrong value type\n");
+	pr_debug("ERROR: wrong value type for 'value'\n");
 	return -BPF_LOADER_ERRNO__OBJCONF_MAP_VALUE;
 }
+
+static int
+bpf__obj_config_map_array_event(struct bpf_map *map,
+				struct parse_events_term *term,
+				struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+	struct bpf_map_def def;
+	struct bpf_map_op *op;
+	const char *map_name;
+	int err;
+
+	map_name = bpf_map__get_name(map);
+	evsel = perf_evlist__find_evsel_by_str(evlist, term->val.str);
+	if (!evsel) {
+		pr_debug("Event (for '%s') '%s' doesn't exist\n",
+			 map_name, term->val.str);
+		return -BPF_LOADER_ERRNO__OBJCONF_MAP_NOEVT;
+	}
+
+	err = bpf_map__get_def(map, &def);
+	if (err) {
+		pr_debug("Unable to get map definition from '%s'\n",
+			 map_name);
+		return err;
+	}
+
+	/*
+	 * No need to check key_size and value_size:
+	 * kernel has already checked them.
+	 */
+	if (def.type != BPF_MAP_TYPE_PERF_EVENT_ARRAY) {
+		pr_debug("Map %s type is not BPF_MAP_TYPE_PERF_EVENT_ARRAY\n",
+			 map_name);
+		return -BPF_LOADER_ERRNO__OBJCONF_MAP_TYPE;
+	}
+
+	op = bpf_map_op__alloc(map);
+	if (IS_ERR(op))
+		return PTR_ERR(op);
+
+	op->v.evsel = evsel;
+	op->op_type = BPF_MAP_OP_SET_EVSEL;
+	return 0;
+}
+
+static int
+bpf__obj_config_map_event(struct bpf_map *map,
+			  struct parse_events_term *term,
+			  struct perf_evlist *evlist)
+{
+	if (!term->err_val) {
+		pr_debug("Config value not set\n");
+		return -BPF_LOADER_ERRNO__OBJCONF_CONF;
+	}
+
+	if (term->type_val == PARSE_EVENTS__TERM_TYPE_STR)
+		return bpf__obj_config_map_array_event(map, term, evlist);
+
+	pr_debug("ERROR: wrong value type for 'event'\n");
+	return -BPF_LOADER_ERRNO__OBJCONF_MAP_VALUE;
+}
+
 
 struct bpf_obj_config_map_func {
 	const char *config_opt;
@@ -903,6 +968,7 @@ struct bpf_obj_config_map_func {
 
 struct bpf_obj_config_map_func bpf_obj_config_map_funcs[] = {
 	{"value", bpf__obj_config_map_value},
+	{"event", bpf__obj_config_map_event},
 };
 
 static int
@@ -1047,6 +1113,7 @@ bpf_map_config_foreach_key(struct bpf_map *map,
 	list_for_each_entry(op, &priv->ops_list, list) {
 		switch (def.type) {
 		case BPF_MAP_TYPE_ARRAY:
+		case BPF_MAP_TYPE_PERF_EVENT_ARRAY:
 			switch (op->key_type) {
 			case BPF_MAP_KEY_ALL:
 				return foreach_key_array_all(func, arg, name,
@@ -1101,6 +1168,60 @@ apply_config_value_for_key(int map_fd, void *pkey,
 }
 
 static int
+apply_config_evsel_for_key(const char *name, int map_fd, void *pkey,
+			   struct perf_evsel *evsel)
+{
+	struct xyarray *xy = evsel->fd;
+	struct perf_event_attr *attr;
+	unsigned int key, events;
+	bool check_pass = false;
+	int *evt_fd;
+	int err;
+
+	if (!xy) {
+		pr_debug("ERROR: evsel not ready for map %s\n", name);
+		return -BPF_LOADER_ERRNO__INTERNAL;
+	}
+
+	if (xy->row_size / xy->entry_size != 1) {
+		pr_debug("ERROR: Dimension of target event is incorrect for map %s\n",
+			 name);
+		return -BPF_LOADER_ERRNO__OBJCONF_MAP_EVTDIM;
+	}
+
+	attr = &evsel->attr;
+	if (attr->inherit) {
+		pr_debug("ERROR: Can't put inherit event into map %s\n", name);
+		return -BPF_LOADER_ERRNO__OBJCONF_MAP_EVTINH;
+	}
+
+	if (attr->type == PERF_TYPE_RAW)
+		check_pass = true;
+	if (attr->type == PERF_TYPE_HARDWARE)
+		check_pass = true;
+	if (attr->type == PERF_TYPE_SOFTWARE &&
+			attr->config == PERF_COUNT_SW_BPF_OUTPUT)
+		check_pass = true;
+	if (!check_pass) {
+		pr_debug("ERROR: Event type is wrong for map %s\n", name);
+		return -BPF_LOADER_ERRNO__OBJCONF_MAP_EVTTYPE;
+	}
+
+	events = xy->entries / (xy->row_size / xy->entry_size);
+	key = *((unsigned int *)pkey);
+	if (key >= events) {
+		pr_debug("ERROR: there is no event %d for map %s\n",
+			 key, name);
+		return -BPF_LOADER_ERRNO__OBJCONF_MAP_MAPSIZE;
+	}
+	evt_fd = xyarray__entry(xy, key, 0);
+	err = bpf_map_update_elem(map_fd, pkey, evt_fd, BPF_ANY);
+	if (err && errno)
+		err = -errno;
+	return err;
+}
+
+static int
 apply_obj_config_map_for_key(const char *name, int map_fd,
 			     struct bpf_map_def *pdef __maybe_unused,
 			     struct bpf_map_op *op,
@@ -1113,6 +1234,10 @@ apply_obj_config_map_for_key(const char *name, int map_fd,
 		err = apply_config_value_for_key(map_fd, pkey,
 						 pdef->value_size,
 						 op->v.value);
+		break;
+	case BPF_MAP_OP_SET_EVSEL:
+		err = apply_config_evsel_for_key(name, map_fd, pkey,
+						 op->v.evsel);
 		break;
 	default:
 		pr_debug("ERROR: unknown value type for '%s'\n", name);
@@ -1179,6 +1304,11 @@ static const char *bpf_loader_strerror_table[NR_ERRNO] = {
 	[ERRCODE_OFFSET(OBJCONF_MAP_TYPE)]	= "Incorrect map type",
 	[ERRCODE_OFFSET(OBJCONF_MAP_KEYSIZE)]	= "Incorrect map key size",
 	[ERRCODE_OFFSET(OBJCONF_MAP_VALUESIZE)]	= "Incorrect map value size",
+	[ERRCODE_OFFSET(OBJCONF_MAP_NOEVT)]	= "Event not found for map setting",
+	[ERRCODE_OFFSET(OBJCONF_MAP_MAPSIZE)]	= "Invalid map size for event setting",
+	[ERRCODE_OFFSET(OBJCONF_MAP_EVTDIM)]	= "Event dimension too large",
+	[ERRCODE_OFFSET(OBJCONF_MAP_EVTINH)]	= "Doesn't support inherit event",
+	[ERRCODE_OFFSET(OBJCONF_MAP_EVTTYPE)]	= "Wrong event type for map",
 };
 
 static int
@@ -1315,6 +1445,12 @@ int bpf__strerror_config_obj(struct bpf_object *obj __maybe_unused,
 int bpf__strerror_apply_obj_config(int err, char *buf, size_t size)
 {
 	bpf__strerror_head(err, buf, size);
+	bpf__strerror_entry(BPF_LOADER_ERRNO__OBJCONF_MAP_EVTDIM,
+			    "Cannot set event to BPF maps in multi-thread tracing");
+	bpf__strerror_entry(BPF_LOADER_ERRNO__OBJCONF_MAP_EVTINH,
+			    "%s (Hint: use -i to turn off inherit)", emsg);
+	bpf__strerror_entry(BPF_LOADER_ERRNO__OBJCONF_MAP_EVTTYPE,
+			    "Can only put raw, hardware and BPF output event into a BPF map");
 	bpf__strerror_end(buf, size);
 	return 0;
 }
