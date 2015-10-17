@@ -2148,8 +2148,39 @@ void parse_events__free_terms(struct list_head *terms)
 {
 	struct parse_events_term *term, *h;
 
-	list_for_each_entry_safe(term, h, terms, list)
+	list_for_each_entry_safe(term, h, terms, list) {
+		if (term->array.nr_ranges)
+			free(term->array.ranges);
 		free(term);
+	}
+}
+
+int parse_events__merge_arrays(struct parse_events_array *dest,
+			       struct parse_events_array *another)
+{
+	struct parse_events_array new;
+
+	if (!dest || !another)
+		return -EINVAL;
+
+	new.nr_ranges = dest->nr_ranges + another->nr_ranges;
+	new.ranges = malloc(sizeof(new.ranges[0]) * new.nr_ranges);
+	if (!new.ranges)
+		return -ENOMEM;
+
+	memcpy(&new.ranges[0], dest->ranges,
+	       sizeof(new.ranges[0]) * dest->nr_ranges);
+	memcpy(&new.ranges[dest->nr_ranges], another->ranges,
+	       sizeof(new.ranges[0]) * another->nr_ranges);
+	free(dest->ranges);
+	free(another->ranges);
+	*dest = new;
+	return 0;
+}
+
+void parse_events__clear_array(struct parse_events_array *a)
+{
+	free(a->ranges);
 }
 
 void parse_events_evlist_error(struct parse_events_evlist *data,
