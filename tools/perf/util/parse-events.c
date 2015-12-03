@@ -993,6 +993,12 @@ do {									   \
 	case PARSE_EVENTS__TERM_TYPE_NOINHERIT:
 		CHECK_TYPE_VAL(NUM);
 		break;
+	case PARSE_EVENTS__TERM_TYPE_OVERWRITE:
+		CHECK_TYPE_VAL(NUM);
+		break;
+	case PARSE_EVENTS__TERM_TYPE_NOOVERWRITE:
+		CHECK_TYPE_VAL(NUM);
+		break;
 	case PARSE_EVENTS__TERM_TYPE_NAME:
 		CHECK_TYPE_VAL(STR);
 		break;
@@ -1050,6 +1056,8 @@ static int config_term_tracepoint(struct perf_event_attr *attr,
 	case PARSE_EVENTS__TERM_TYPE_STACKSIZE:
 	case PARSE_EVENTS__TERM_TYPE_INHERIT:
 	case PARSE_EVENTS__TERM_TYPE_NOINHERIT:
+	case PARSE_EVENTS__TERM_TYPE_OVERWRITE:
+	case PARSE_EVENTS__TERM_TYPE_NOOVERWRITE:
 		return config_term_common(attr, term, err);
 	default:
 		if (err) {
@@ -1121,6 +1129,12 @@ do {								\
 			break;
 		case PARSE_EVENTS__TERM_TYPE_CONTROL:
 			ADD_CONFIG_TERM(CONTROL, control, term->val.num ? 1 : 0);
+			break;
+		case PARSE_EVENTS__TERM_TYPE_OVERWRITE:
+			ADD_CONFIG_TERM(OVERWRITE, overwrite, term->val.num ? 1 : 0);
+			break;
+		case PARSE_EVENTS__TERM_TYPE_NOOVERWRITE:
+			ADD_CONFIG_TERM(OVERWRITE, overwrite, term->val.num ? 0 : 1);
 			break;
 		default:
 			break;
