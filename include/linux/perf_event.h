@@ -841,13 +841,13 @@ extern void perf_event_output(struct perf_event *event,
 			      struct pt_regs *regs);
 
 extern void
-perf_event_header__init_id(struct perf_event_header *header,
-			   struct perf_sample_data *data,
-			   struct perf_event *event);
+perf_event_header__init_extra(struct perf_event_header *header,
+			      struct perf_sample_data *data,
+			      struct perf_event *event);
 extern void
-perf_event__output_id_sample(struct perf_event *event,
-			     struct perf_output_handle *handle,
-			     struct perf_sample_data *sample);
+perf_event__output_extra(struct perf_event *event, u64 evt_size,
+			 struct perf_output_handle *handle,
+			 struct perf_sample_data *sample);
 
 extern void
 perf_log_lost_samples(struct perf_event *event, u64 lost);
@@ -1041,6 +1041,11 @@ static inline bool has_aux(struct perf_event *event)
 static inline bool is_write_backward(struct perf_event *event)
 {
 	return !!event->attr.write_backward;
+}
+
+static inline bool has_tailsize(struct perf_event *event)
+{
+	return !!(event->attr.sample_type & PERF_SAMPLE_TAILSIZE);
 }
 
 extern int perf_output_begin(struct perf_output_handle *handle,

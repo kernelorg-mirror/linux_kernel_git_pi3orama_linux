@@ -5141,12 +5141,14 @@ static void __perf_event_header__init_id(struct perf_event_header *header,
 	}
 }
 
-void perf_event_header__init_id(struct perf_event_header *header,
-				struct perf_sample_data *data,
-				struct perf_event *event)
+void perf_event_header__init_extra(struct perf_event_header *header,
+				   struct perf_sample_data *data,
+				   struct perf_event *event)
 {
 	if (event->attr.sample_id_all)
 		__perf_event_header__init_id(header, data, event);
+	if (has_tailsize(event))
+		header->size += sizeof(u64);
 }
 
 static void __perf_event__output_id_sample(struct perf_output_handle *handle,
@@ -5173,12 +5175,14 @@ static void __perf_event__output_id_sample(struct perf_output_handle *handle,
 		perf_output_put(handle, data->id);
 }
 
-void perf_event__output_id_sample(struct perf_event *event,
-				  struct perf_output_handle *handle,
-				  struct perf_sample_data *sample)
+void perf_event__output_extra(struct perf_event *event, u64 evt_size,
+			      struct perf_output_handle *handle,
+			      struct perf_sample_data *sample)
 {
 	if (event->attr.sample_id_all)
 		__perf_event__output_id_sample(handle, sample);
+	if (has_tailsize(event))
+		perf_output_put(handle, evt_size);
 }
 
 static void perf_output_read_one(struct perf_output_handle *handle,
@@ -5420,6 +5424,13 @@ void perf_output_sample(struct perf_output_handle *handle,
 		}
 	}
 
+	/* Should be the last one */
+	if (sample_type & PERF_SAMPLE_TAILSIZE) {
+		u64 evt_size = header->size;
+
+		perf_output_put(handle, evt_size);
+	}
+
 	if (!event->attr.watermark) {
 		int wakeup_events = event->attr.wakeup_events;
 
@@ -5539,6 +5550,9 @@ void perf_prepare_sample(struct perf_event_header *header,
 
 		header->size += size;
 	}
+
+	if (sample_type & PERF_SAMPLE_TAILSIZE)
+		header->size += sizeof(u64);
 }
 
 static void __always_inline
@@ -5620,14 +5634,15 @@ perf_event_read_event(struct perf_event *event,
 	};
 	int ret;
 
-	perf_event_header__init_id(&read_event.header, &sample, event);
+	perf_event_header__init_extra(&read_event.header, &sample, event);
 	ret = perf_output_begin(&handle, event, read_event.header.size);
 	if (ret)
 		return;
 
 	perf_output_put(&handle, read_event);
 	perf_output_read(&handle, event);
-	perf_event__output_id_sample(event, &handle, &sample);
+	perf_event__output_extra(event, read_event.header.size,
+				 &handle, &sample);
 
 	perf_output_end(&handle);
 }
@@ -5739,7 +5754,7 @@ static void perf_event_task_output(struct perf_event *event,
 	if (!perf_event_task_match(event))
 		return;
 
-	perf_event_header__init_id(&task_event->event_id.header, &sample, event);
+	perf_event_header__init_extra(&task_event->event_id.header, &sample, event);
 
 	ret = perf_output_begin(&handle, event,
 				task_event->event_id.header.size);
@@ -5756,7 +5771,9 @@ static void perf_event_task_output(struct perf_event *event,
 
 	perf_output_put(&handle, task_event->event_id);
 
-	perf_event__output_id_sample(event, &handle, &sample);
+	perf_event__output_extra(event,
+				 task_event->event_id.header.size,
+				 &handle, &sample);
 
 	perf_output_end(&handle);
 out:
@@ -5835,7 +5852,7 @@ static void perf_event_comm_output(struct perf_event *event,
 	if (!perf_event_comm_match(event))
 		return;
 
-	perf_event_header__init_id(&comm_event->event_id.header, &sample, event);
+	perf_event_header__init_extra(&comm_event->event_id.header, &sample, event);
 	ret = perf_output_begin(&handle, event,
 				comm_event->event_id.header.size);
 
@@ -5849,7 +5866,8 @@ static void perf_event_comm_output(struct perf_event *event,
 	__output_copy(&handle, comm_event->comm,
 				   comm_event->comm_size);
 
-	perf_event__output_id_sample(event, &handle, &sample);
+	perf_event__output_extra(event, comm_event->event_id.header.size,
+				 &handle, &sample);
 
 	perf_output_end(&handle);
 out:
@@ -5958,7 +5976,7 @@ static void perf_event_mmap_output(struct perf_event *event,
 		mmap_event->event_id.header.size += sizeof(mmap_event->flags);
 	}
 
-	perf_event_header__init_id(&mmap_event->event_id.header, &sample, event);
+	perf_event_header__init_extra(&mmap_event->event_id.header, &sample, event);
 	ret = perf_output_begin(&handle, event,
 				mmap_event->event_id.header.size);
 	if (ret)
@@ -5981,7 +5999,8 @@ static void perf_event_mmap_output(struct perf_event *event,
 	__output_copy(&handle, mmap_event->file_name,
 				   mmap_event->file_size);
 
-	perf_event__output_id_sample(event, &handle, &sample);
+	perf_event__output_extra(event, mmap_event->event_id.header.size,
+				 &handle, &sample);
 
 	perf_output_end(&handle);
 out:
@@ -6164,14 +6183,15 @@ void perf_event_aux_event(struct perf_event *event, unsigned long head,
 	};
 	int ret;
 
-	perf_event_header__init_id(&rec.header, &sample, event);
+	perf_event_header__init_extra(&rec.header, &sample, event);
 	ret = perf_output_begin(&handle, event, rec.header.size);
 
 	if (ret)
 		return;
 
 	perf_output_put(&handle, rec);
-	perf_event__output_id_sample(event, &handle, &sample);
+	perf_event__output_extra(event, rec.header.size,
+				 &handle, &sample);
 
 	perf_output_end(&handle);
 }
@@ -6197,7 +6217,7 @@ void perf_log_lost_samples(struct perf_event *event, u64 lost)
 		.lost		= lost,
 	};
 
-	perf_event_header__init_id(&lost_samples_event.header, &sample, event);
+	perf_event_header__init_extra(&lost_samples_event.header, &sample, event);
 
 	ret = perf_output_begin(&handle, event,
 				lost_samples_event.header.size);
@@ -6205,7 +6225,8 @@ void perf_log_lost_samples(struct perf_event *event, u64 lost)
 		return;
 
 	perf_output_put(&handle, lost_samples_event);
-	perf_event__output_id_sample(event, &handle, &sample);
+	perf_event__output_extra(event, lost_samples_event.header.size,
+				 &handle, &sample);
 	perf_output_end(&handle);
 }
 
@@ -6252,7 +6273,7 @@ static void perf_event_switch_output(struct perf_event *event, void *data)
 					perf_event_tid(event, se->next_prev);
 	}
 
-	perf_event_header__init_id(&se->event_id.header, &sample, event);
+	perf_event_header__init_extra(&se->event_id.header, &sample, event);
 
 	ret = perf_output_begin(&handle, event, se->event_id.header.size);
 	if (ret)
@@ -6263,7 +6284,8 @@ static void perf_event_switch_output(struct perf_event *event, void *data)
 	else
 		perf_output_put(&handle, se->event_id);
 
-	perf_event__output_id_sample(event, &handle, &sample);
+	perf_event__output_extra(event, se->event_id.header.size,
+				 &handle, &sample);
 
 	perf_output_end(&handle);
 }
@@ -6323,7 +6345,7 @@ static void perf_log_throttle(struct perf_event *event, int enable)
 	if (enable)
 		throttle_event.header.type = PERF_RECORD_UNTHROTTLE;
 
-	perf_event_header__init_id(&throttle_event.header, &sample, event);
+	perf_event_header__init_extra(&throttle_event.header, &sample, event);
 
 	ret = perf_output_begin(&handle, event,
 				throttle_event.header.size);
@@ -6331,7 +6353,8 @@ static void perf_log_throttle(struct perf_event *event, int enable)
 		return;
 
 	perf_output_put(&handle, throttle_event);
-	perf_event__output_id_sample(event, &handle, &sample);
+	perf_event__output_extra(event, throttle_event.header.size,
+				 &handle, &sample);
 	perf_output_end(&handle);
 }
 
@@ -6359,14 +6382,15 @@ static void perf_log_itrace_start(struct perf_event *event)
 	rec.pid	= perf_event_pid(event, current);
 	rec.tid	= perf_event_tid(event, current);
 
-	perf_event_header__init_id(&rec.header, &sample, event);
+	perf_event_header__init_extra(&rec.header, &sample, event);
 	ret = perf_output_begin(&handle, event, rec.header.size);
 
 	if (ret)
 		return;
 
 	perf_output_put(&handle, rec);
-	perf_event__output_id_sample(event, &handle, &sample);
+	perf_event__output_extra(event, rec.header.size,
+				 &handle, &sample);
 
 	perf_output_end(&handle);
 }
@@ -8149,6 +8173,16 @@ perf_event_set_output(struct perf_event *event, struct perf_event *output_event)
 	 */
 	if (has_aux(event) && has_aux(output_event) &&
 	    event->pmu != output_event->pmu)
+		goto out;
+
+	/*
+	 * Don't allow mixed tailsize setting since the resuling
+	 * ringbuffer would unable to be parsed backward.
+	 *
+	 * '!=' is safe because has_tailsize() returns bool, two differnt
+	 * non-zero values would be treated as equal (both true).
+	 */
+	if (has_tailsize(event) != has_tailsize(output_event))
 		goto out;
 
 set:

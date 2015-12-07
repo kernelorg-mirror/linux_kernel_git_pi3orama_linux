@@ -213,10 +213,11 @@ __perf_output_begin(struct perf_output_handle *handle,
 		lost_event.id          = event->id;
 		lost_event.lost        = local_xchg(&rb->lost, 0);
 
-		perf_event_header__init_id(&lost_event.header,
-					   &sample_data, event);
+		perf_event_header__init_extra(&lost_event.header,
+					      &sample_data, event);
 		perf_output_put(handle, lost_event);
-		perf_event__output_id_sample(event, handle, &sample_data);
+		perf_event__output_extra(event, lost_event.header.type,
+					 handle, &sample_data);
 	}
 
 	return 0;
