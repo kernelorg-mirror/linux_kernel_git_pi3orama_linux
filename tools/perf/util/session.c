@@ -1701,7 +1701,7 @@ done:
 out_err:
 	free(buf);
 	perf_session__warn_about_errors(session);
-	ordered_events__free(&session->ordered_events);
+	ordered_events__reset(&session->ordered_events);
 	auxtrace__free_events(session);
 	return err;
 }
@@ -1857,7 +1857,7 @@ out:
 out_err:
 	ui_progress__finish();
 	perf_session__warn_about_errors(session);
-	ordered_events__free(&session->ordered_events);
+	ordered_events__reset(&session->ordered_events);
 	auxtrace__free_events(session);
 	session->one_mmap = false;
 	return err;
