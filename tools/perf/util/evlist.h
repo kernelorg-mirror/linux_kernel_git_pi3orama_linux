@@ -20,6 +20,11 @@ struct record_opts;
 #define PERF_EVLIST__HLIST_BITS 8
 #define PERF_EVLIST__HLIST_SIZE (1 << PERF_EVLIST__HLIST_BITS)
 
+#define PERF_EVLIST__NR_CHANNELS	1
+enum perf_evlist_mmap_flag {
+	PERF_EVLIST__CHANNEL_ENABLED	= 1,
+};
+
 /**
  * struct perf_mmap - perf's ring buffer mmap details
  *
@@ -52,6 +57,7 @@ struct perf_evlist {
 		pid_t	pid;
 	} workload;
 	struct fdarray	 pollfd;
+	unsigned long channel_flags[PERF_EVLIST__NR_CHANNELS];
 	struct perf_mmap *mmap;
 	struct thread_map *threads;
 	struct cpu_map	  *cpus;
@@ -116,9 +122,61 @@ struct perf_evsel *perf_evlist__id2evsel_strict(struct perf_evlist *evlist,
 
 struct perf_sample_id *perf_evlist__id2sid(struct perf_evlist *evlist, u64 id);
 
+union perf_event *perf_evlist__mmap_read_ex(struct perf_evlist *evlist,
+					    int channel, int idx);
 union perf_event *perf_evlist__mmap_read(struct perf_evlist *evlist, int idx);
 
+void perf_evlist__mmap_consume_ex(struct perf_evlist *evlist,
+				  int channel, int idx);
 void perf_evlist__mmap_consume(struct perf_evlist *evlist, int idx);
+int perf_evlist__mmap_nr(struct perf_evlist *evlist);
+
+int perf_evlist__channel_nr(struct perf_evlist *evlist);
+void perf_evlist__channel_reset(struct perf_evlist *evlist);
+int perf_evlist__channel_add(struct perf_evlist *evlist,
+			     unsigned long flag,
+			     bool is_default);
+
+static inline bool
+__perf_evlist__channel_check(struct perf_evlist *evlist, int channel,
+			     enum perf_evlist_mmap_flag bits)
+{
+	if (channel >= PERF_EVLIST__NR_CHANNELS)
+		return false;
+
+	return (evlist->channel_flags[channel] & bits) ? true : false;
+}
+#define perf_evlist__channel_check(e, c, b) \
+		__perf_evlist__channel_check(e, c, PERF_EVLIST__CHANNEL_##b)
+
+static inline bool
+perf_evlist__channel_is_enabled(struct perf_evlist *evlist, int channel)
+{
+	return perf_evlist__channel_check(evlist, channel, ENABLED);
+}
+
+static inline int
+perf_evlist__idx_channel(struct perf_evlist *evlist, int idx)
+{
+	int channel = idx / evlist->nr_mmaps;
+
+	if (channel >= PERF_EVLIST__NR_CHANNELS)
+		return -E2BIG;
+	return channel;
+}
+
+int perf_evlist__channel_idx(struct perf_evlist *evlist,
+			     int *p_channel, int *p_idx);
+
+static inline struct perf_mmap *
+perf_evlist__get_mmap(struct perf_evlist *evlist,
+		      int channel, int idx)
+{
+	if (perf_evlist__channel_idx(evlist, &channel, &idx))
+		return NULL;
+
+	return &evlist->mmap[idx];
+}
 
 int perf_evlist__open(struct perf_evlist *evlist);
 void perf_evlist__close(struct perf_evlist *evlist);
