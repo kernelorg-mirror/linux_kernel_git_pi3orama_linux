@@ -679,6 +679,33 @@ static struct perf_evsel *perf_evlist__event2evsel(struct perf_evlist *evlist,
 	return NULL;
 }
 
+int perf_evlist__channel_idx(struct perf_evlist *evlist,
+			     int *p_channel, int *p_idx)
+{
+	int channel = *p_channel;
+	int _idx = *p_idx;
+
+	if (_idx < 0)
+		return -EINVAL;
+	/*
+	 * Negative channel means caller explicitly use real index.
+	 */
+	if (channel < 0) {
+		channel = perf_evlist__idx_channel(evlist, _idx);
+		_idx = _idx % evlist->nr_mmaps;
+	}
+	if (channel < 0)
+		return channel;
+	if (channel >= PERF_EVLIST__NR_CHANNELS)
+		return -E2BIG;
+	if (_idx >= evlist->nr_mmaps)
+		return -E2BIG;
+
+	*p_channel = channel;
+	*p_idx = evlist->nr_mmaps * channel + _idx;
+	return 0;
+}
+
 /* When check_messup is true, 'end' must points to a known good entry */
 static union perf_event *
 __perf_evlist__mmap_read(struct perf_mmap *md, bool check_messup, u64 start,
@@ -749,11 +776,19 @@ broken_event:
 	return event;
 }
 
-union perf_event *perf_evlist__mmap_read(struct perf_evlist *evlist, int idx)
+union perf_event *perf_evlist__mmap_read_ex(struct perf_evlist *evlist,
+					    int channel, int idx)
 {
 	struct perf_mmap *md = &evlist->mmap[idx];
-	u64 head;
-	u64 old = md->prev;
+	u64 head, old;
+	int err = perf_evlist__channel_idx(evlist, &channel, &idx);
+
+	if (err || !perf_evlist__channel_is_enabled(evlist, channel)) {
+		pr_err("ERROR: invalid mmap index: channel %d, idx: %d\n",
+		       channel, idx);
+		return NULL;
+	}
+	old = md->prev;
 
 	/*
 	 * Check if event was unmapped due to a POLLHUP/POLLERR.
@@ -765,6 +800,11 @@ union perf_event *perf_evlist__mmap_read(struct perf_evlist *evlist, int idx)
 
 	return __perf_evlist__mmap_read(md, evlist->overwrite, old,
 					head, &md->prev);
+}
+
+union perf_event *perf_evlist__mmap_read(struct perf_evlist *evlist, int idx)
+{
+	return perf_evlist__mmap_read_ex(evlist, -1, idx);
 }
 
 static bool perf_mmap__empty(struct perf_mmap *md)
@@ -785,9 +825,17 @@ static void perf_evlist__mmap_put(struct perf_evlist *evlist, int idx)
 		__perf_evlist__munmap(evlist, idx);
 }
 
-void perf_evlist__mmap_consume(struct perf_evlist *evlist, int idx)
+void perf_evlist__mmap_consume_ex(struct perf_evlist *evlist,
+				  int channel, int idx)
 {
+	int err = perf_evlist__channel_idx(evlist, &channel, &idx);
 	struct perf_mmap *md = &evlist->mmap[idx];
+
+	if (err || !perf_evlist__channel_is_enabled(evlist, channel)) {
+		pr_err("ERROR: invalid mmap index: channel %d, idx: %d\n",
+		       channel, idx);
+		return;
+	}
 
 	if (!evlist->overwrite) {
 		u64 old = md->prev;
@@ -797,6 +845,11 @@ void perf_evlist__mmap_consume(struct perf_evlist *evlist, int idx)
 
 	if (atomic_read(&md->refcnt) == 1 && perf_mmap__empty(md))
 		perf_evlist__mmap_put(evlist, idx);
+}
+
+void perf_evlist__mmap_consume(struct perf_evlist *evlist, int idx)
+{
+	perf_evlist__mmap_consume_ex(evlist, -1, idx);
 }
 
 int __weak auxtrace_mmap__mmap(struct auxtrace_mmap *mm __maybe_unused,
@@ -844,7 +897,7 @@ void perf_evlist__munmap(struct perf_evlist *evlist)
 	if (evlist->mmap == NULL)
 		return;
 
-	for (i = 0; i < evlist->nr_mmaps; i++)
+	for (i = 0; i < perf_evlist__mmap_nr(evlist); i++)
 		__perf_evlist__munmap(evlist, i);
 
 	zfree(&evlist->mmap);
@@ -852,10 +905,17 @@ void perf_evlist__munmap(struct perf_evlist *evlist)
 
 static int perf_evlist__alloc_mmap(struct perf_evlist *evlist)
 {
+	int total_mmaps;
+
 	evlist->nr_mmaps = cpu_map__nr(evlist->cpus);
 	if (cpu_map__empty(evlist->cpus))
 		evlist->nr_mmaps = thread_map__nr(evlist->threads);
-	evlist->mmap = zalloc(evlist->nr_mmaps * sizeof(struct perf_mmap));
+
+	total_mmaps = perf_evlist__mmap_nr(evlist);
+	if (!total_mmaps)
+		return -EINVAL;
+
+	evlist->mmap = zalloc(total_mmaps * sizeof(struct perf_mmap));
 	return evlist->mmap != NULL ? 0 : -ENOMEM;
 }
 
@@ -1156,6 +1216,12 @@ int perf_evlist__mmap_ex(struct perf_evlist *evlist, unsigned int pages,
 int perf_evlist__mmap(struct perf_evlist *evlist, unsigned int pages,
 		      bool overwrite)
 {
+	int err;
+
+	perf_evlist__channel_reset(evlist);
+	err = perf_evlist__channel_add(evlist, 0, true);
+	if (err < 0)
+		return err;
 	return perf_evlist__mmap_ex(evlist, pages, overwrite, 0, false);
 }
 
@@ -1796,4 +1862,56 @@ perf_evlist__find_evsel_by_str(struct perf_evlist *evlist,
 	}
 
 	return NULL;
+}
+
+int perf_evlist__channel_nr(struct perf_evlist *evlist)
+{
+	int i;
+
+	for (i = PERF_EVLIST__NR_CHANNELS - 1; i >= 0; i--) {
+		unsigned long flags = evlist->channel_flags[i];
+
+		if (flags & PERF_EVLIST__CHANNEL_ENABLED)
+			return i + 1;
+	}
+	return 0;
+}
+
+int perf_evlist__mmap_nr(struct perf_evlist *evlist)
+{
+	return evlist->nr_mmaps * perf_evlist__channel_nr(evlist);
+}
+
+void perf_evlist__channel_reset(struct perf_evlist *evlist)
+{
+	int i;
+
+	BUG_ON(evlist->mmap);
+
+	for (i = 0; i < PERF_EVLIST__NR_CHANNELS; i++)
+		evlist->channel_flags[i] = 0;
+}
+
+int perf_evlist__channel_add(struct perf_evlist *evlist,
+			     unsigned long flag,
+			     bool is_default)
+{
+	int n = perf_evlist__channel_nr(evlist);
+	unsigned long *flags = evlist->channel_flags;
+
+	BUG_ON(evlist->mmap);
+
+	if (n >= PERF_EVLIST__NR_CHANNELS) {
+		pr_debug("ERROR: too many channels. Increase PERF_EVLIST__NR_CHANNELS\n");
+		return -ENOSPC;
+	}
+
+	if (is_default) {
+		memmove(&flags[1], &flags[0],
+			sizeof(evlist->channel_flags) -
+			sizeof(evlist->channel_flags[0]));
+		n = 0;
+	}
+	flags[n] = flag | PERF_EVLIST__CHANNEL_ENABLED;
+	return n;
 }

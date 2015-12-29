@@ -317,6 +317,12 @@ try_again:
 		goto out;
 	}
 
+	perf_evlist__channel_reset(evlist);
+	rc = perf_evlist__channel_add(evlist, 0, true);
+	if (rc < 0)
+		goto out;
+	rc = 0;
+
 	if (perf_evlist__mmap_ex(evlist, opts->mmap_pages, false,
 				 opts->auxtrace_mmap_pages,
 				 opts->auxtrace_snapshot_mode) < 0) {
