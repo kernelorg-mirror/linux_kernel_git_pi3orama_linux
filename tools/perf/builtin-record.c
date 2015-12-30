@@ -427,8 +427,9 @@ static int record__mmap_read_all(struct record *rec)
 	u64 bytes_written = rec->bytes_written;
 	int i;
 	int rc = 0;
+	int total_mmaps = perf_evlist__mmap_nr(rec->evlist);
 
-	for (i = 0; i < rec->evlist->nr_mmaps; i++) {
+	for (i = 0; i < total_mmaps; i++) {
 		struct auxtrace_mmap *mm = &rec->evlist->mmap[i].auxtrace_mmap;
 
 		if (rec->evlist->mmap[i].base) {

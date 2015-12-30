@@ -20,7 +20,7 @@ struct record_opts;
 #define PERF_EVLIST__HLIST_BITS 8
 #define PERF_EVLIST__HLIST_SIZE (1 << PERF_EVLIST__HLIST_BITS)
 
-#define PERF_EVLIST__NR_CHANNELS	1
+#define PERF_EVLIST__NR_CHANNELS	2
 enum perf_evlist_mmap_flag {
 	PERF_EVLIST__CHANNEL_ENABLED	= 1,
 };
