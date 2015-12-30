@@ -873,6 +873,21 @@ static void __perf_evlist__munmap(struct perf_evlist *evlist, int idx)
 	auxtrace_mmap__munmap(&evlist->mmap[idx].auxtrace_mmap);
 }
 
+static void
+__perf_evlist__munmap_channels(struct perf_evlist *evlist, int _idx)
+{
+	int _ch;
+
+	for (_ch = 0; _ch < perf_evlist__channel_nr(evlist); _ch++) {
+		int err, idx = _idx, ch = _ch;
+
+		err = perf_evlist__channel_idx(evlist, &ch, &idx);
+		if (err < 0)
+			continue;
+		__perf_evlist__munmap(evlist, idx);
+	}
+}
+
 void perf_evlist__munmap(struct perf_evlist *evlist)
 {
 	int i;
@@ -980,26 +995,38 @@ perf_evlist__channel_complete(struct perf_evlist *evlist)
 	return 0;
 }
 
-static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int idx,
+static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int _idx,
 				       struct mmap_params *mp, int cpu,
-				       int thread, int *output)
+				       int thread, int *outputs)
 {
 	struct perf_evsel *evsel;
 
 	evlist__for_each(evlist, evsel) {
-		int fd;
+		int fd, channel, idx, err;
+
+		channel = perf_evlist__channel_find(evlist, evsel, false);
+		if (channel < 0) {
+			pr_err("ERROR: unable to find suitable channel for %s\n",
+			       evsel->name);
+			return -1;
+		}
+
+		idx = _idx;
+		err = perf_evlist__channel_idx(evlist, &channel, &idx);
+		if (err < 0)
+			return err;
 
 		if (evsel->system_wide && thread)
 			continue;
 
 		fd = FD(evsel, cpu, thread);
 
-		if (*output == -1) {
-			*output = fd;
-			if (__perf_evlist__mmap(evlist, idx, mp, *output) < 0)
+		if (outputs[channel] == -1) {
+			outputs[channel] = fd;
+			if (__perf_evlist__mmap(evlist, idx, mp, outputs[channel]) < 0)
 				return -1;
 		} else {
-			if (ioctl(fd, PERF_EVENT_IOC_SET_OUTPUT, *output) != 0)
+			if (ioctl(fd, PERF_EVENT_IOC_SET_OUTPUT, outputs[channel]) != 0)
 				return -1;
 
 			perf_evlist__mmap_get(evlist, idx);
@@ -1039,14 +1066,15 @@ static int perf_evlist__mmap_per_cpu(struct perf_evlist *evlist,
 
 	pr_debug2("perf event ring buffer mmapped per cpu\n");
 	for (cpu = 0; cpu < nr_cpus; cpu++) {
-		int output = -1;
+		int outputs[PERF_EVLIST__NR_CHANNELS];
 
+		memset(outputs, -1, sizeof(outputs));
 		auxtrace_mmap_params__set_idx(&mp->auxtrace_mp, evlist, cpu,
 					      true);
 
 		for (thread = 0; thread < nr_threads; thread++) {
 			if (perf_evlist__mmap_per_evsel(evlist, cpu, mp, cpu,
-							thread, &output))
+							thread, outputs))
 				goto out_unmap;
 		}
 	}
@@ -1055,7 +1083,7 @@ static int perf_evlist__mmap_per_cpu(struct perf_evlist *evlist,
 
 out_unmap:
 	for (cpu = 0; cpu < nr_cpus; cpu++)
-		__perf_evlist__munmap(evlist, cpu);
+		__perf_evlist__munmap_channels(evlist, cpu);
 	return -1;
 }
 
@@ -1067,13 +1095,14 @@ static int perf_evlist__mmap_per_thread(struct perf_evlist *evlist,
 
 	pr_debug2("perf event ring buffer mmapped per thread\n");
 	for (thread = 0; thread < nr_threads; thread++) {
-		int output = -1;
+		int outputs[PERF_EVLIST__NR_CHANNELS];
 
+		memset(outputs, -1, sizeof(outputs));
 		auxtrace_mmap_params__set_idx(&mp->auxtrace_mp, evlist, thread,
 					      false);
 
 		if (perf_evlist__mmap_per_evsel(evlist, thread, mp, 0, thread,
-						&output))
+						outputs))
 			goto out_unmap;
 	}
 
@@ -1081,7 +1110,7 @@ static int perf_evlist__mmap_per_thread(struct perf_evlist *evlist,
 
 out_unmap:
 	for (thread = 0; thread < nr_threads; thread++)
-		__perf_evlist__munmap(evlist, thread);
+		__perf_evlist__munmap_channels(evlist, thread);
 	return -1;
 }
 
