@@ -115,6 +115,7 @@ struct perf_evsel {
 	bool			per_pkg;
 	bool			precise_max;
 	bool			control;
+	bool			overwrite;
 	/* parse modifier helper */
 	int			exclude_GH;
 	int			nr_members;
