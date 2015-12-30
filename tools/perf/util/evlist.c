@@ -731,7 +731,7 @@ union perf_event *perf_evlist__mmap_read_ex(struct perf_evlist *evlist,
 		return NULL;
 
 	head = perf_mmap__read_head(md);
-	if (evlist->overwrite) {
+	if (perf_evlist__channel_check(evlist, channel, RDONLY)) {
 		/*
 		 * If we're further behind than half the buffer, there's a chance
 		 * the writer will bite our tail and mess up the samples under us.
@@ -820,7 +820,7 @@ void perf_evlist__mmap_consume_ex(struct perf_evlist *evlist,
 		return;
 	}
 
-	if (!evlist->overwrite) {
+	if (!perf_evlist__channel_check(evlist, channel, RDONLY)) {
 		u64 old = md->prev;
 
 		perf_mmap__write_tail(md, old);
@@ -918,7 +918,6 @@ static int perf_evlist__alloc_mmap(struct perf_evlist *evlist)
 }
 
 struct mmap_params {
-	int prot;
 	int mask;
 	struct auxtrace_mmap_params auxtrace_mp;
 };
@@ -926,6 +925,15 @@ struct mmap_params {
 static int __perf_evlist__mmap(struct perf_evlist *evlist, int idx,
 			       struct mmap_params *mp, int fd)
 {
+	int channel = perf_evlist__idx_channel(evlist, idx);
+	int prot = PROT_READ;
+
+	if (channel < 0)
+		return -1;
+
+	if (!perf_evlist__channel_check(evlist, channel, RDONLY))
+		prot |= PROT_WRITE;
+
 	/*
 	 * The last one will be done at perf_evlist__mmap_consume(), so that we
 	 * make sure we don't prevent tools from consuming every last event in
@@ -942,7 +950,7 @@ static int __perf_evlist__mmap(struct perf_evlist *evlist, int idx,
 	atomic_set(&evlist->mmap[idx].refcnt, 2);
 	evlist->mmap[idx].prev = 0;
 	evlist->mmap[idx].mask = mp->mask;
-	evlist->mmap[idx].base = mmap(NULL, evlist->mmap_len, mp->prot,
+	evlist->mmap[idx].base = mmap(NULL, evlist->mmap_len, prot,
 				      MAP_SHARED, fd, 0);
 	if (evlist->mmap[idx].base == MAP_FAILED) {
 		pr_debug2("failed to mmap perf event ring buffer, error %d\n",
@@ -959,9 +967,13 @@ static int __perf_evlist__mmap(struct perf_evlist *evlist, int idx,
 }
 
 static unsigned long
-perf_evlist__channel_for_evsel(struct perf_evsel *evsel __maybe_unused)
+perf_evlist__channel_for_evsel(struct perf_evsel *evsel)
 {
-	return 0;
+	unsigned long flag = 0;
+
+	if (evsel->overwrite)
+		flag |= PERF_EVLIST__CHANNEL_RDONLY;
+	return flag;
 }
 
 static int
@@ -1211,11 +1223,10 @@ int perf_evlist__parse_mmap_pages(const struct option *opt, const char *str,
  * perf_evlist__mmap_ex - Create mmaps to receive events.
  * @evlist: list of events
  * @pages: map length in pages
- * @overwrite: overwrite older events?
  * @auxtrace_pages - auxtrace map length in pages
  * @auxtrace_overwrite - overwrite older auxtrace data?
  *
- * If @overwrite is %false the user needs to signal event consumption using
+ * For writable channel, the user needs to signal event consumption using
  * perf_mmap__write_tail().  Using perf_evlist__mmap_read() does this
  * automatically.
  *
@@ -1225,16 +1236,13 @@ int perf_evlist__parse_mmap_pages(const struct option *opt, const char *str,
  * Return: %0 on success, negative error code otherwise.
  */
 int perf_evlist__mmap_ex(struct perf_evlist *evlist, unsigned int pages,
-			 bool overwrite, unsigned int auxtrace_pages,
-			 bool auxtrace_overwrite)
+			 unsigned int auxtrace_pages, bool auxtrace_overwrite)
 {
 	int err;
 	struct perf_evsel *evsel;
 	const struct cpu_map *cpus = evlist->cpus;
 	const struct thread_map *threads = evlist->threads;
-	struct mmap_params mp = {
-		.prot = PROT_READ | (overwrite ? 0 : PROT_WRITE),
-	};
+	struct mmap_params mp;
 
 	err = perf_evlist__channel_complete(evlist);
 	if (err)
@@ -1246,7 +1254,6 @@ int perf_evlist__mmap_ex(struct perf_evlist *evlist, unsigned int pages,
 	if (evlist->pollfd.entries == NULL && perf_evlist__alloc_pollfd(evlist) < 0)
 		return -ENOMEM;
 
-	evlist->overwrite = overwrite;
 	evlist->mmap_len = perf_evlist__mmap_size(pages);
 	pr_debug("mmap size %zuB\n", evlist->mmap_len);
 	mp.mask = evlist->mmap_len - page_size - 1;
@@ -1270,8 +1277,13 @@ int perf_evlist__mmap_ex(struct perf_evlist *evlist, unsigned int pages,
 int perf_evlist__mmap(struct perf_evlist *evlist, unsigned int pages,
 		      bool overwrite)
 {
+	struct perf_evsel *evsel;
+
 	perf_evlist__channel_reset(evlist);
-	return perf_evlist__mmap_ex(evlist, pages, overwrite, 0, false);
+	evlist__for_each(evlist, evsel)
+		evsel->overwrite = overwrite;
+
+	return perf_evlist__mmap_ex(evlist, pages, 0, false);
 }
 
 int perf_evlist__create_maps(struct perf_evlist *evlist, struct target *target)

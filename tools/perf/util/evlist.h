@@ -23,6 +23,7 @@ struct record_opts;
 #define PERF_EVLIST__NR_CHANNELS	2
 enum perf_evlist_mmap_flag {
 	PERF_EVLIST__CHANNEL_ENABLED	= 1,
+	PERF_EVLIST__CHANNEL_RDONLY	= 2,
 };
 
 /**
@@ -45,7 +46,6 @@ struct perf_evlist {
 	int		 nr_entries;
 	int		 nr_groups;
 	int		 nr_mmaps;
-	bool		 overwrite;
 	bool		 enabled;
 	bool		 has_user_cpus;
 	size_t		 mmap_len;
@@ -203,8 +203,7 @@ int perf_evlist__parse_mmap_pages(const struct option *opt,
 				  int unset);
 
 int perf_evlist__mmap_ex(struct perf_evlist *evlist, unsigned int pages,
-			 bool overwrite, unsigned int auxtrace_pages,
-			 bool auxtrace_overwrite);
+			 unsigned int auxtrace_pages, bool auxtrace_overwrite);
 int perf_evlist__mmap(struct perf_evlist *evlist, unsigned int pages,
 		      bool overwrite);
 void perf_evlist__munmap(struct perf_evlist *evlist);
