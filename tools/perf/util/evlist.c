@@ -943,6 +943,43 @@ static int __perf_evlist__mmap(struct perf_evlist *evlist, int idx,
 	return 0;
 }
 
+static unsigned long
+perf_evlist__channel_for_evsel(struct perf_evsel *evsel __maybe_unused)
+{
+	return 0;
+}
+
+static int
+perf_evlist__channel_find(struct perf_evlist *evlist,
+			  struct perf_evsel *evsel,
+			  bool add_new)
+{
+	unsigned long flag = perf_evlist__channel_for_evsel(evsel);
+	int i;
+
+	flag |= PERF_EVLIST__CHANNEL_ENABLED;
+	for (i = 0; i < perf_evlist__channel_nr(evlist); i++)
+		if (evlist->channel_flags[i] == flag)
+			return i;
+	if (add_new)
+		return perf_evlist__channel_add(evlist, flag, false);
+	return -ENOENT;
+}
+
+static int
+perf_evlist__channel_complete(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+	int err;
+
+	evlist__for_each(evlist, evsel) {
+		err = perf_evlist__channel_find(evlist, evsel, true);
+		if (err < 0)
+			return err;
+	}
+	return 0;
+}
+
 static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int idx,
 				       struct mmap_params *mp, int cpu,
 				       int thread, int *output)
@@ -1162,12 +1199,17 @@ int perf_evlist__mmap_ex(struct perf_evlist *evlist, unsigned int pages,
 			 bool overwrite, unsigned int auxtrace_pages,
 			 bool auxtrace_overwrite)
 {
+	int err;
 	struct perf_evsel *evsel;
 	const struct cpu_map *cpus = evlist->cpus;
 	const struct thread_map *threads = evlist->threads;
 	struct mmap_params mp = {
 		.prot = PROT_READ | (overwrite ? 0 : PROT_WRITE),
 	};
+
+	err = perf_evlist__channel_complete(evlist);
+	if (err)
+		return err;
 
 	if (evlist->mmap == NULL && perf_evlist__alloc_mmap(evlist) < 0)
 		return -ENOMEM;
@@ -1199,12 +1241,7 @@ int perf_evlist__mmap_ex(struct perf_evlist *evlist, unsigned int pages,
 int perf_evlist__mmap(struct perf_evlist *evlist, unsigned int pages,
 		      bool overwrite)
 {
-	int err;
-
 	perf_evlist__channel_reset(evlist);
-	err = perf_evlist__channel_add(evlist, 0, true);
-	if (err < 0)
-		return err;
 	return perf_evlist__mmap_ex(evlist, pages, overwrite, 0, false);
 }
 
