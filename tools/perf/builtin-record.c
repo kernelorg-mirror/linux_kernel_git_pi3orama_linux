@@ -529,6 +529,8 @@ record__finish_output(struct record *rec)
 	return;
 }
 
+static int record__synthesize(struct record *rec);
+
 static int
 record__switch_output(struct record *rec, bool at_exit)
 {
@@ -557,6 +559,15 @@ record__switch_output(struct record *rec, bool at_exit)
 	if (!quiet)
 		fprintf(stderr, "[ perf record: Dump %s.%s ]\n",
 			file->path, timestamp);
+
+	/* Reinit machine */
+	if (!at_exit) {
+		machines__exit(&rec->session->machines);
+		machines__init(&rec->session->machines);
+		perf_session__create_kernel_maps(rec->session);
+		perf_session__set_id_hdr_size(rec->session);
+		record__synthesize(rec);
+	}
 	return fd;
 }
 
