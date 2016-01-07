@@ -567,6 +567,23 @@ record__switch_output(struct record *rec, bool at_exit)
 		perf_session__create_kernel_maps(rec->session);
 		perf_session__set_id_hdr_size(rec->session);
 		record__synthesize(rec);
+
+		if (target__none(&rec->opts.target)) {
+			struct {
+				struct thread_map map;
+				struct thread_map_data map_data;
+			} thread_map;
+
+			thread_map.map.nr = 1;
+			thread_map.map.map[0].pid = rec->evlist->workload.pid;
+			thread_map.map.map[0].comm = NULL;
+			perf_event__synthesize_thread_map(&rec->tool,
+					&thread_map.map,
+					process_synthesized_event,
+					&rec->session->machines.host,
+					rec->opts.sample_address,
+					rec->opts.proc_map_timeout);
+		}
 	}
 	return fd;
 }
