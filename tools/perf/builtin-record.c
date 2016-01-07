@@ -55,6 +55,7 @@ struct record {
 	bool			no_buildid_cache_set;
 	bool			buildid_all;
 	bool			timestamp_filename;
+	bool			switch_output;
 	unsigned long long	samples;
 };
 
@@ -163,6 +164,7 @@ auxtrace_snapshot_is_enabled(void)
 
 static volatile int auxtrace_snapshot_err;
 static volatile int auxtrace_record__snapshot_started;
+static volatile int switch_output_started;
 
 static void sig_handler(int sig)
 {
@@ -672,7 +674,7 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 	signal(SIGINT, sig_handler);
 	signal(SIGTERM, sig_handler);
 
-	if (rec->opts.auxtrace_snapshot_mode) {
+	if (rec->opts.auxtrace_snapshot_mode || rec->switch_output) {
 		signal(SIGUSR2, snapshot_sig_handler);
 		auxtrace_snapshot_on();
 	} else {
@@ -824,9 +826,25 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 			}
 		}
 
+		if (switch_output_started) {
+			switch_output_started = 0;
+
+			if (!quiet)
+				fprintf(stderr, "[ perf record: dump data: Woken up %ld times ]\n",
+					waking);
+			waking = 0;
+			fd = record__switch_output(rec, false);
+			if (fd < 0) {
+				pr_err("Failed to switch to new file\n");
+				err = fd;
+				goto out_child;
+			}
+		}
+
 		if (hits == rec->samples) {
 			if (done || draining)
 				break;
+
 			err = perf_evlist__poll(rec->evlist, -1);
 			/*
 			 * Propagate error, only if there's any. Ignore positive
@@ -1274,6 +1292,8 @@ struct option __record_options[] = {
 		    "Record build-id of all DSOs regardless of hits"),
 	OPT_BOOLEAN(0, "timestamp-filename", &record.timestamp_filename,
 		    "append timestamp to output filename"),
+	OPT_BOOLEAN(0, "switch-output", &record.switch_output,
+		    "Switch output when receive SIGUSR2"),
 	OPT_END()
 };
 
@@ -1414,9 +1434,11 @@ out_symbol_exit:
 
 static void snapshot_sig_handler(int sig __maybe_unused)
 {
-	if (!auxtrace_snapshot_is_enabled())
-		return;
-	auxtrace_snapshot_disable();
-	auxtrace_snapshot_err = auxtrace_record__snapshot_start(record.itr);
-	auxtrace_record__snapshot_started = 1;
+	if (auxtrace_snapshot_is_enabled()) {
+		auxtrace_snapshot_disable();
+		auxtrace_snapshot_err = auxtrace_record__snapshot_start(record.itr);
+		auxtrace_record__snapshot_started = 1;
+	}
+
+	switch_output_started = 1;
 }
