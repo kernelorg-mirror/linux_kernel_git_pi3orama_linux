@@ -679,13 +679,15 @@ static void apply_config_terms(struct perf_evsel *evsel,
 	}
 
 	/*
-	 * Set backward after config term processing because it is
-	 * possible to set overwrite globally, without config
-	 * terms.
+	 * Set backward/tailsize after config term processing
+	 * because it is possible to set overwrite globally,
+	 * without config terms.
 	 */
 	if (evsel->overwrite) {
-		if (opts->has_write_backward)
+		if (opts->has_write_backward && !opts->use_tailsize)
 			attr->write_backward = 1;
+		else if (opts->has_tailsize)
+			perf_evsel__set_sample_bit(evsel, TAILSIZE);
 		else
 			pr_err("Reading from overwrite event %s is not supported\n",
 			       evsel->name);

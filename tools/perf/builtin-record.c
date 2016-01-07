@@ -333,9 +333,11 @@ static int record__open(struct record *rec)
 
 	evlist__for_each(evlist, pos) {
 		if (pos->overwrite) {
-			if (!pos->attr.write_backward) {
-				ui__warning("Unable to read from overwrite ring buffer\n\n");
+			if (!pos->attr.write_backward &&
+				!(pos->attr.sample_type &
+					PERF_SAMPLE_TAILSIZE)) {
 				rc = -ENOSYS;
+				ui__warning("Unable to read from overwrite ring buffer\n");
 				goto out;
 			}
 		}
