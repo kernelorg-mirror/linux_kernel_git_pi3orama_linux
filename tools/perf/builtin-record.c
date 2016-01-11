@@ -66,6 +66,7 @@ struct record {
 	bool			timestamp_filename;
 	bool			switch_output;
 	enum overwrite_evt_state overwrite_evt_state;
+	bool			tail_tracking;
 	unsigned long long	samples;
 };
 
@@ -671,6 +672,26 @@ static int record__synthesize_workload(struct record *rec)
 
 static int record__synthesize(struct record *rec);
 
+static void record__synthesize_target(struct record *rec)
+{
+	if (target__none(&rec->opts.target)) {
+		struct {
+			struct thread_map map;
+			struct thread_map_data map_data;
+		} thread_map;
+
+		thread_map.map.nr = 1;
+		thread_map.map.map[0].pid = rec->evlist->workload.pid;
+		thread_map.map.map[0].comm = NULL;
+		perf_event__synthesize_thread_map(&rec->tool,
+				&thread_map.map,
+				process_synthesized_event,
+				&rec->session->machines.host,
+				rec->opts.sample_address,
+				rec->opts.proc_map_timeout);
+	}
+}
+
 static int
 record__switch_output(struct record *rec, bool at_exit)
 {
@@ -679,6 +700,11 @@ record__switch_output(struct record *rec, bool at_exit)
 
 	/* Same Size:      "2015122520103046"*/
 	char timestamp[] = "InvalidTimestamp";
+
+	if (rec->tail_tracking) {
+		record__synthesize(rec);
+		record__synthesize_target(rec);
+	}
 
 	rec->samples = 0;
 	record__finish_output(rec);
@@ -701,7 +727,7 @@ record__switch_output(struct record *rec, bool at_exit)
 			file->path, timestamp);
 
 	/* Output tracking events */
-	if (!at_exit) {
+	if (!at_exit && !rec->tail_tracking) {
 		record__synthesize(rec);
 
 		/*
@@ -919,9 +945,11 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 
 	machine = &session->machines.host;
 
-	err = record__synthesize(rec);
-	if (err < 0)
-		goto out_child;
+	if (!rec->tail_tracking) {
+		err = record__synthesize(rec);
+		if (err < 0)
+			goto out_child;
+	}
 
 	if (rec->realtime_prio) {
 		struct sched_param param;
@@ -1062,6 +1090,13 @@ static int __cmd_record(struct record *rec, int argc, const char **argv)
 			disabled = true;
 		}
 	}
+
+	if (rec->tail_tracking) {
+		err = record__synthesize(rec);
+		if (err < 0)
+			goto out_child;
+	}
+
 	auxtrace_snapshot_disable();
 
 	if (forks && workload_exec_errno) {
@@ -1496,6 +1531,8 @@ struct option __record_options[] = {
 		    "append timestamp to output filename"),
 	OPT_BOOLEAN(0, "switch-output", &record.switch_output,
 		    "Switch output when receive SIGUSR2"),
+	OPT_BOOLEAN(0, "tail-tracking", &record.tail_tracking,
+		    "Generate tracking events at the end of output"),
 	OPT_END()
 };
 
