@@ -144,10 +144,10 @@ static int __perf_evsel__calc_id_pos(u64 sample_type)
  */
 static int __perf_evsel__calc_is_pos(u64 sample_type)
 {
-	int idx = 1;
+	int idx = 1 + (sample_type & PERF_SAMPLE_TAILSIZE ? 1 : 0);
 
 	if (sample_type & PERF_SAMPLE_IDENTIFIER)
-		return 1;
+		return idx;
 
 	if (!(sample_type & PERF_SAMPLE_ID))
 		return -1;
