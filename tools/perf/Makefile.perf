@@ -166,6 +166,11 @@ endif
 endif
 
 ifeq ($(config),1)
+ifdef MAKECMDGOALS
+ifeq ($(filter feature-dump,$(MAKECMDGOALS)),feature-dump)
+FEATURE_TESTS := all
+endif
+endif
 include config/Makefile
 endif
 
