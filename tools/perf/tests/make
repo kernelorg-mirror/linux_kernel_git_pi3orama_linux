@@ -15,6 +15,7 @@ else
 PERF := .
 PERF_OUT := $(PERF)
 O_OPT :=
+FULL_O := $(shell readlink -f $(PERF_OUT) || echo $(PERF_OUT))
 
 ifneq ($(O),)
   FULL_O := $(shell readlink -f $(O) || echo $(O))
@@ -318,6 +319,30 @@ all: $(run) $(run_O) tarpkg make_kernelsrc make_kernelsrc_tools
 
 out: $(run_O)
 	@echo OK
+
+FEATURES_DUMP_FILE := $(FULL_O)/BUILD_TEST_FEATURE_DUMP
+FEATURES_DUMP_FILE_STATIC := $(FULL_O)/BUILD_TEST_FEATURE_DUMP_STATIC
+
+$(FEATURES_DUMP_FILE):
+	$(call clean)
+	@cmd="cd $(PERF) && make FEATURE_DUMP_COPY=$@ $(O_OPT) feature-dump"; \
+	echo "- $@: $$cmd" && echo $$cmd && \
+	( eval $$cmd ) 2>&1
+
+$(FEATURES_DUMP_FILE_STATIC):
+	$(call clean)
+	@cmd="cd $(PERF) && make FEATURE_DUMP_COPY=$@ $(O_OPT) LDFLAGS='-static' feature-dump"; \
+	echo "- $@: $$cmd" && echo $$cmd && \
+	( eval $$cmd ) 2>&1
+
+$(foreach t,$(run) $(run_O),$(eval \
+	$(t): $(if $(findstring make_static,$(t)),\
+		$(FEATURES_DUMP_FILE_STATIC),\
+		$(FEATURES_DUMP_FILE))))
+
+$(foreach t,$(run),$(if $(findstring make_static,$(t)),\
+			$(eval $(t) := $($(t)) FEATURES_DUMP=$(FEATURES_DUMP_FILE_STATIC)),\
+			$(eval $(t) := $($(t)) FEATURES_DUMP=$(FEATURES_DUMP_FILE))))
 
 .PHONY: all $(run) $(run_O) tarpkg clean make_kernelsrc make_kernelsrc_tools
 endif # ifndef MK
