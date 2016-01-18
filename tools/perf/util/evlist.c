@@ -1274,8 +1274,15 @@ bool perf_evlist__valid_sample_type(struct perf_evlist *evlist)
 		return false;
 
 	evlist__for_each(evlist, pos) {
-		if (pos->id_pos != evlist->id_pos ||
-		    pos->is_pos != evlist->is_pos)
+		if (pos->id_pos != evlist->id_pos)
+			return false;
+		/*
+		 * Only tracking events needs is_pos. Those events are
+		 * collected if evsel->tracking is selected.
+		 * For other evsel, is_pos is useless for other evsels,
+		 * so skip validating them.
+		 */
+		if (pos->tracking && pos->is_pos != evlist->is_pos)
 			return false;
 	}
 
