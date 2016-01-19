@@ -85,6 +85,11 @@ static void perf_probe_comm_exec(struct perf_evsel *evsel)
 	evsel->attr.comm_exec = 1;
 }
 
+static void perf_probe_write_backward(struct perf_evsel *evsel)
+{
+	evsel->attr.write_backward = 1;
+}
+
 static void perf_probe_context_switch(struct perf_evsel *evsel)
 {
 	evsel->attr.context_switch = 1;
@@ -103,6 +108,11 @@ static bool perf_can_comm_exec(void)
 bool perf_can_record_switch_events(void)
 {
 	return perf_probe_api(perf_probe_context_switch);
+}
+
+static bool perf_can_write_backward(void)
+{
+	return perf_probe_api(perf_probe_write_backward);
 }
 
 bool perf_can_record_cpu_wide(void)
@@ -236,6 +246,7 @@ static int record_opts__config_freq(struct record_opts *opts)
 
 int record_opts__config(struct record_opts *opts)
 {
+	opts->has_write_backward = perf_can_write_backward();
 	return record_opts__config_freq(opts);
 }
 
