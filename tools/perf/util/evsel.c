@@ -1009,6 +1009,12 @@ int perf_evsel__disable(struct perf_evsel *evsel)
 				     0);
 }
 
+int perf_evsel__pause(struct perf_evsel *evsel, bool pause)
+{
+	return perf_evsel__run_ioctl(evsel, 1, 1, PERF_EVENT_IOC_PAUSE_OUTPUT,
+				     (void *)(pause ? 1UL : 0UL));
+}
+
 int perf_evsel__alloc_id(struct perf_evsel *evsel, int ncpus, int nthreads)
 {
 	if (ncpus == 0 || nthreads == 0)
