@@ -90,6 +90,11 @@ static void perf_probe_write_backward(struct perf_evsel *evsel)
 	evsel->attr.write_backward = 1;
 }
 
+static void perf_probe_sample_tailsize(struct perf_evsel *evsel)
+{
+	evsel->attr.sample_type |= PERF_SAMPLE_TAILSIZE;
+}
+
 static void perf_probe_context_switch(struct perf_evsel *evsel)
 {
 	evsel->attr.context_switch = 1;
@@ -113,6 +118,11 @@ bool perf_can_record_switch_events(void)
 static bool perf_can_write_backward(void)
 {
 	return perf_probe_api(perf_probe_write_backward);
+}
+
+static bool perf_can_sample_tailsize(void)
+{
+	return perf_probe_api(perf_probe_sample_tailsize);
 }
 
 bool perf_can_record_cpu_wide(void)
@@ -246,6 +256,7 @@ static int record_opts__config_freq(struct record_opts *opts)
 int record_opts__config(struct record_opts *opts)
 {
 	opts->has_write_backward = perf_can_write_backward();
+	opts->has_tailsize = perf_can_sample_tailsize();
 	return record_opts__config_freq(opts);
 }
 
