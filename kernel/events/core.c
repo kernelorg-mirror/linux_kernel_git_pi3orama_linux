@@ -5531,9 +5531,13 @@ void perf_prepare_sample(struct perf_event_header *header,
 	}
 }
 
-void perf_event_output(struct perf_event *event,
-			struct perf_sample_data *data,
-			struct pt_regs *regs)
+static void __always_inline
+__perf_event_output(struct perf_event *event,
+		    struct perf_sample_data *data,
+		    struct pt_regs *regs,
+		    int (*output_begin)(struct perf_output_handle *,
+					struct perf_event *,
+					unsigned int))
 {
 	struct perf_output_handle handle;
 	struct perf_event_header header;
@@ -5543,7 +5547,7 @@ void perf_event_output(struct perf_event *event,
 
 	perf_prepare_sample(&header, data, event, regs);
 
-	if (perf_output_begin(&handle, event, header.size))
+	if (output_begin(&handle, event, header.size))
 		goto exit;
 
 	perf_output_sample(&handle, &header, data, event);
@@ -5552,6 +5556,30 @@ void perf_event_output(struct perf_event *event,
 
 exit:
 	rcu_read_unlock();
+}
+
+void
+perf_event_output_onward(struct perf_event *event,
+			 struct perf_sample_data *data,
+			 struct pt_regs *regs)
+{
+	__perf_event_output(event, data, regs, perf_output_begin_onward);
+}
+
+void
+perf_event_output_backward(struct perf_event *event,
+			   struct perf_sample_data *data,
+			   struct pt_regs *regs)
+{
+	__perf_event_output(event, data, regs, perf_output_begin_backward);
+}
+
+void
+perf_event_output(struct perf_event *event,
+		  struct perf_sample_data *data,
+		  struct pt_regs *regs)
+{
+	__perf_event_output(event, data, regs, perf_output_begin);
 }
 
 /*
@@ -7868,8 +7896,11 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	if (overflow_handler) {
 		event->overflow_handler	= overflow_handler;
 		event->overflow_handler_context = context;
+	} else if (is_write_backward(event)){
+		event->overflow_handler = perf_event_output_backward;
+		event->overflow_handler_context = NULL;
 	} else {
-		event->overflow_handler = perf_event_output;
+		event->overflow_handler = perf_event_output_onward;
 		event->overflow_handler_context = NULL;
 	}
 
