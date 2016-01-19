@@ -73,6 +73,7 @@ struct record_opts {
 	bool         use_clockid;
 	bool	     has_write_backward;
 	bool	     has_tailsize;
+	bool	     use_tailsize;
 	clockid_t    clockid;
 	unsigned int proc_map_timeout;
 };

@@ -1348,6 +1348,8 @@ struct option __record_options[] = {
 		    "append timestamp to output filename"),
 	OPT_BOOLEAN(0, "switch-output", &record.switch_output,
 		    "Switch output when receive SIGUSR2"),
+	OPT_BOOLEAN(0, "use-tailsize", &record.opts.use_tailsize,
+		    "Use tailsize for overwrite ring buffer instead of backward writing"),
 	OPT_END()
 };
 
