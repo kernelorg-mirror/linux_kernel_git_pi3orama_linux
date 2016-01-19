@@ -8101,6 +8101,13 @@ perf_event_set_output(struct perf_event *event, struct perf_event *output_event)
 		goto out;
 
 	/*
+	 * Either writing ring buffer from beginning or from end.
+	 * Mixing is not allowed.
+	 */
+	if (is_write_backward(output_event) != is_write_backward(event))
+		goto out;
+
+	/*
 	 * If both events generate aux data, they must be on the same PMU
 	 */
 	if (has_aux(event) && has_aux(output_event) &&
