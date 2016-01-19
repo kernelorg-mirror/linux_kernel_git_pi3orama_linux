@@ -973,6 +973,8 @@ perf_evlist__channel_for_evsel(struct perf_evsel *evsel)
 
 	if (evsel->overwrite)
 		flag |= PERF_EVLIST__CHANNEL_RDONLY;
+	if (evsel->attr.write_backward)
+		flag |= PERF_EVLIST__CHANNEL_BACKWARD;
 	return flag;
 }
 
