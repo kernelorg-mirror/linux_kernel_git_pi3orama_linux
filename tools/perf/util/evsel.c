@@ -688,6 +688,19 @@ static void apply_config_terms(struct perf_evsel *evsel,
 		}
 	}
 
+	/*
+	 * Set backward after config term processing because it is
+	 * possible to set overwrite globally, without config
+	 * terms.
+	 */
+	if (evsel->overwrite) {
+		if (opts->has_write_backward)
+			attr->write_backward = 1;
+		else
+			pr_err("Reading from overwrite event %s is not supported\n",
+			       evsel->name);
+	}
+
 	/* User explicitly set per-event callgraph, clear the old setting and reset. */
 	if ((callgraph_buf != NULL) || (dump_size > 0)) {
 
