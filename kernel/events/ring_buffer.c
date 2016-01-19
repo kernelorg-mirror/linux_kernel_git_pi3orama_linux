@@ -233,6 +233,8 @@ out:
 int perf_output_begin(struct perf_output_handle *handle,
 		      struct perf_event *event, unsigned int size)
 {
+	if (unlikely(is_write_backward(event)))
+		return __perf_output_begin(handle, event, size, true);
 	return __perf_output_begin(handle, event, size, false);
 }
 
