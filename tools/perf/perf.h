@@ -73,6 +73,7 @@ struct record_opts {
 	bool	     sample_transaction;
 	unsigned     initial_delay;
 	bool         use_clockid;
+	bool	     has_write_backward;
 	clockid_t    clockid;
 	unsigned int proc_map_timeout;
 };
