@@ -120,6 +120,66 @@ backward_rb_find_range(void *buf, int mask, u64 head, u64 *start, u64 *end)
 	return -1;
 }
 
+static int
+tailsize_rb_find_range(void *buf, int mask, u64 head, u64 *start, u64 *end)
+{
+	int buf_size = mask + 1;
+	u64 evt_head = head;
+	u64 *pevt_size;
+
+	*end = head;
+	pr_debug2("start reading tailsize, head=%"PRId64"\n", head);
+	while (true) {
+		struct perf_event_header *pheader;
+
+		pevt_size = buf + ((evt_head - sizeof(*pevt_size)) & mask);
+		pr_debug3("read tailsize: size: %"PRId64"\n", *pevt_size);
+
+		if (*pevt_size % sizeof(u64) != 0) {
+			pr_warning("Tailsize ring buffer corrupted: unaligned\n");
+			return -1;
+		}
+
+		if (!*pevt_size) {
+			if (evt_head) {
+				pr_warning("Tailsize ring buffer corrupted: size is 0 but evt_head (0x%"PRIx64") is not 0\n",
+					   evt_head);
+				return -1;
+			}
+			*start = evt_head;
+			return 0;
+		}
+
+		if (evt_head < *pevt_size) {
+			pr_warning("Tailsize ring buffer corrupted: head (%"PRId64") < size (%"PRId64")\n",
+				   evt_head, *pevt_size);
+			return -1;
+		}
+
+		evt_head -= *pevt_size;
+		pr_debug3("move evt_head: %"PRIx64"\n", evt_head);
+
+		if (evt_head + buf_size < head) {
+			evt_head += *pevt_size;
+			pr_debug("Finish reading tailsize buffer, evt_head=%"PRIx64", head=%"PRIx64"\n",
+				 evt_head, head);
+			*start = evt_head;
+			return 0;
+		}
+
+		pheader = (struct perf_event_header *)(buf + (evt_head & mask));
+		if (pheader->size != *pevt_size) {
+			pr_warning("Tailsize ring buffer corrupted: found size mismatch: %d vs %"PRId64"\n",
+				   pheader->size, *pevt_size);
+			return -1;
+		}
+	}
+
+	pr_warning("ERROR: shouldn't get there\n");
+	return -1;
+}
+
+
 static int 
 rb_find_range(struct perf_evlist *evlist, int idx,
 	      void *data, int mask, u64 head, u64 old,
@@ -136,6 +196,8 @@ rb_find_range(struct perf_evlist *evlist, int idx,
 
 	if (perf_evlist__channel_check(evlist, channel, BACKWARD))
 		return backward_rb_find_range(data, mask, head, start, end);
+	if (perf_evlist__channel_check(evlist, channel, TAILSIZE))
+		return tailsize_rb_find_range(data, mask, head, start, end);
 
 	WARN_ONCE(1, "Unable to find start position from a read-only ring buffer\n");
 	return -1;
@@ -593,6 +655,8 @@ static bool record__mmap_should_read(struct record *rec, int idx)
 		if (rec->overwrite_evt_state != OVERWRITE_EVT_DATA_PENDING)
 			return false;
 		if (perf_evlist__channel_check(rec->evlist, channel, BACKWARD))
+			return true;
+		if (perf_evlist__channel_check(rec->evlist, channel, TAILSIZE))
 			return true;
 		else
 			return false;
