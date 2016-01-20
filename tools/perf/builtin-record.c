@@ -89,6 +89,61 @@ static int process_synthesized_event(struct perf_tool *tool,
 	return record__write(rec, event, event->header.size);
 }
 
+static int
+backward_rb_find_range(void *buf, int mask, u64 head, u64 *start, u64 *end)
+{
+	struct perf_event_header *pheader;
+	u64 evt_head = head;
+	int size = mask + 1;
+
+	pr_debug2("backward_rb_find_range: buf=%p, head=%"PRIx64"\n", buf, head);
+	pheader = (struct perf_event_header *)(buf + (head & mask));
+	*start = head;
+	while (true) {
+		if (evt_head - head >= (unsigned int)size) {
+			pr_debug("Finshed reading backward ring buffer: rewind\n");
+			if (evt_head - head > (unsigned int)size)
+				evt_head -= pheader->size;
+			*end = evt_head;
+			return 0;
+		}
+
+		pheader = (struct perf_event_header *)(buf + (evt_head & mask));
+
+		if (pheader->size == 0) {
+			pr_debug("Finshed reading backward ring buffer: get start\n");
+			*end = evt_head;
+			return 0;
+		}
+
+		evt_head += pheader->size;
+		pr_debug3("move evt_head: %"PRIx64"\n", evt_head);
+	}
+	WARN_ONCE(1, "Shouldn't get here\n");
+	return -1;
+}
+
+static int
+rb_find_range(struct perf_evlist *evlist, int idx,
+	      void *data, int mask, u64 head, u64 old,
+	      u64 *start, u64 *end)
+{
+	int channel;
+
+	channel = perf_evlist__idx_channel(evlist, idx);
+	if (!perf_evlist__channel_check(evlist, channel, RDONLY)) {
+		*start = old;
+		*end = head;
+		return 0;
+	}
+
+	if (perf_evlist__channel_check(evlist, channel, BACKWARD))
+		return backward_rb_find_range(data, mask, head, start, end);
+
+	WARN_ONCE(1, "Unable to find start position from a read-only ring buffer\n");
+	return -1;
+}
+
 static int record__mmap_read(struct record *rec, int idx)
 {
 	struct perf_mmap *md = &rec->evlist->mmap[idx];
@@ -99,6 +154,10 @@ static int record__mmap_read(struct record *rec, int idx)
 	unsigned long size;
 	void *buf;
 	int rc = 0;
+
+	if (rb_find_range(rec->evlist, idx, data, md->mask, head,
+			  old, &start, &end))
+		return -1;
 
 	if (start == end)
 		return 0;
@@ -499,8 +558,14 @@ static bool record__mmap_should_read(struct record *rec, int idx)
 		return false;
 	if (perf_evlist__channel_idx(rec->evlist, &channel, &idx))
 		return false;
-	if (perf_evlist__channel_check(rec->evlist, channel, RDONLY))
-		return false;
+	if (perf_evlist__channel_check(rec->evlist, channel, RDONLY)) {
+		if (rec->overwrite_evt_state != OVERWRITE_EVT_DATA_PENDING)
+			return false;
+		if (perf_evlist__channel_check(rec->evlist, channel, BACKWARD))
+			return true;
+		else
+			return false;
+	}
 	return true;
 }
 
