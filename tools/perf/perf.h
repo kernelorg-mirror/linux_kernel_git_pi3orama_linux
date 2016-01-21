@@ -73,7 +73,9 @@ struct record_opts {
 	unsigned     initial_delay;
 	bool         use_clockid;
 	bool	     has_write_backward;
+	bool	     has_write_backward_set;
 	bool	     has_tailsize;
+	bool	     has_tailsize_set;
 	bool	     use_tailsize;
 	clockid_t    clockid;
 	unsigned int proc_map_timeout;

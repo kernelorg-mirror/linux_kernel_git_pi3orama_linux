@@ -465,9 +465,7 @@ static int record__open(struct record *rec)
 			if (!pos->attr.write_backward &&
 				!(pos->attr.sample_type &
 					PERF_SAMPLE_TAILSIZE)) {
-				rc = -ENOSYS;
 				ui__warning("Unable to read from overwrite ring buffer\n");
-				goto out;
 			}
 		}
 try_again:
@@ -1589,6 +1587,12 @@ struct option __record_options[] = {
 		    "Switch output when receive SIGUSR2"),
 	OPT_BOOLEAN(0, "use-tailsize", &record.opts.use_tailsize,
 		    "Use tailsize for overwrite ring buffer instead of backward writing"),
+	OPT_BOOLEAN_SET(0, "has-write-backward", &record.opts.has_write_backward,
+			&record.opts.has_write_backward_set,
+			"Manually set support of backward ring buffer"),
+	OPT_BOOLEAN_SET(0, "has-tailsize", &record.opts.has_tailsize,
+			&record.opts.has_tailsize_set,
+			"Manually set support of tailsize ring buffer"),
 	OPT_BOOLEAN(0, "tail-tracking", &record.tail_tracking,
 		    "Generate tracking events at the end of output"),
 	OPT_END()

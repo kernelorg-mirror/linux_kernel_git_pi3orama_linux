@@ -255,8 +255,10 @@ static int record_opts__config_freq(struct record_opts *opts)
 
 int record_opts__config(struct record_opts *opts)
 {
-	opts->has_write_backward = perf_can_write_backward();
-	opts->has_tailsize = perf_can_sample_tailsize();
+	if (!opts->has_write_backward_set)
+		opts->has_write_backward = perf_can_write_backward();
+	if (!opts->has_tailsize_set)
+		opts->has_tailsize = perf_can_sample_tailsize();
 	return record_opts__config_freq(opts);
 }
 
