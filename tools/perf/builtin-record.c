@@ -430,6 +430,19 @@ static struct perf_event_header finished_round_event = {
 	.type = PERF_RECORD_FINISHED_ROUND,
 };
 
+static bool record__mmap_should_read(struct record *rec, int idx)
+{
+	int channel = -1;
+
+	if (!rec->evlist->mmap[idx].base)
+		return false;
+	if (perf_evlist__channel_idx(rec->evlist, &channel, &idx))
+		return false;
+	if (perf_evlist__channel_check(rec->evlist, channel, RDONLY))
+		return false;
+	return true;
+}
+
 static int record__mmap_read_all(struct record *rec)
 {
 	u64 bytes_written = rec->bytes_written;
@@ -440,7 +453,7 @@ static int record__mmap_read_all(struct record *rec)
 	for (i = 0; i < total_mmaps; i++) {
 		struct auxtrace_mmap *mm = &rec->evlist->mmap[i].auxtrace_mmap;
 
-		if (rec->evlist->mmap[i].base) {
+		if (record__mmap_should_read(rec, i)) {
 			if (record__mmap_read(rec, i) != 0) {
 				rc = -1;
 				goto out;
