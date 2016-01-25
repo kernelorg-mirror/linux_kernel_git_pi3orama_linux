@@ -461,9 +461,9 @@ int perf_evlist__alloc_pollfd(struct perf_evlist *evlist)
 	return 0;
 }
 
-static int __perf_evlist__add_pollfd(struct perf_evlist *evlist, int fd, int idx)
+static int __perf_evlist__add_pollfd(struct perf_evlist *evlist, int fd, int idx, short revent)
 {
-	int pos = fdarray__add(&evlist->pollfd, fd, POLLIN | POLLERR | POLLHUP);
+	int pos = fdarray__add(&evlist->pollfd, fd, revent | POLLERR | POLLHUP);
 	/*
 	 * Save the idx so that when we filter out fds POLLHUP'ed we can
 	 * close the associated evlist->mmap[] entry.
@@ -479,7 +479,7 @@ static int __perf_evlist__add_pollfd(struct perf_evlist *evlist, int fd, int idx
 
 int perf_evlist__add_pollfd(struct perf_evlist *evlist, int fd)
 {
-	return __perf_evlist__add_pollfd(evlist, fd, -1);
+	return __perf_evlist__add_pollfd(evlist, fd, -1, POLLIN);
 }
 
 static void perf_evlist__munmap_filtered(struct fdarray *fda, int fd)
@@ -1061,6 +1061,18 @@ perf_evlist__channel_complete(struct perf_evlist *evlist)
 	return 0;
 }
 
+static bool
+perf_evlist__should_poll(struct perf_evlist *evlist,
+			 struct perf_evsel *evsel,
+			 int channel)
+{
+	if (evsel->system_wide)
+		return false;
+	if (perf_evlist__channel_check(evlist, channel, RDONLY))
+		return false;
+	return true;
+}
+
 static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int _idx,
 				       struct mmap_params *mp, int cpu,
 				       int thread, int *outputs)
@@ -1069,6 +1081,7 @@ static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int _idx,
 
 	evlist__for_each(evlist, evsel) {
 		int fd, channel, idx, err;
+		short revent = POLLIN;
 
 		channel = perf_evlist__channel_find(evlist, evsel, false);
 		if (channel < 0) {
@@ -1098,6 +1111,8 @@ static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int _idx,
 			perf_evlist__mmap_get(evlist, idx);
 		}
 
+		if (!perf_evlist__should_poll(evlist, evsel, channel))
+			revent = 0;
 		/*
 		 * The system_wide flag causes a selected event to be opened
 		 * always without a pid.  Consequently it will never get a
@@ -1106,7 +1121,7 @@ static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int _idx,
 		 * Therefore don't add it for polling.
 		 */
 		if (!evsel->system_wide &&
-		    __perf_evlist__add_pollfd(evlist, fd, idx) < 0) {
+		    __perf_evlist__add_pollfd(evlist, fd, idx, revent) < 0) {
 			perf_evlist__mmap_put(evlist, idx);
 			return -1;
 		}
