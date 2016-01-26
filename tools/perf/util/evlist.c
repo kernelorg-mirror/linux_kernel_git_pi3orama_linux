@@ -706,6 +706,34 @@ int perf_evlist__channel_idx(struct perf_evlist *evlist,
 	return 0;
 }
 
+int perf_evlist__channel_toggle_paused(struct perf_evlist *evlist,
+				       int channel, bool pause)
+{
+	int i;
+
+	if (channel >= perf_evlist__channel_nr(evlist))
+		return -E2BIG;
+	if (!evlist->mmap)
+		return -EFAULT;
+	for (i = 0; i < evlist->nr_mmaps; i++) {
+		int n = channel * evlist->nr_mmaps + i;
+		int fd = evlist->mmap[n].fd;
+		int err;
+
+		if (fd < 0)
+			continue;
+		err = ioctl(fd, PERF_EVENT_IOC_PAUSE_OUTPUT,
+			    pause ? 1 : 0);
+		if (err) {
+			err = (errno == 0 ? -EINVAL : -errno);
+			pr_err("Unable to pause output on %d: %s\n",
+			       fd, strerror(-err));
+			return err;
+		}
+	}
+	return 0;
+}
+
 /* When check_messup is true, 'end' must points to a known good entry */
 static union perf_event *
 __perf_evlist__mmap_read(struct perf_mmap *md, bool check_messup, u64 start,
