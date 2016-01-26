@@ -180,6 +180,8 @@ perf_evlist__get_mmap(struct perf_evlist *evlist,
 	return &evlist->mmap[idx];
 }
 
+int perf_evlist__channel_toggle_paused(struct perf_evlist *evlist,
+				       int channel, bool pause);
 int perf_evlist__open(struct perf_evlist *evlist);
 void perf_evlist__close(struct perf_evlist *evlist);
 
