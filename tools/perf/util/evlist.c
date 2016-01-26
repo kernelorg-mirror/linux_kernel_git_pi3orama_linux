@@ -925,6 +925,7 @@ static void __perf_evlist__munmap(struct perf_evlist *evlist, int idx)
 	if (evlist->mmap[idx].base != NULL) {
 		munmap(evlist->mmap[idx].base, evlist->mmap_len);
 		evlist->mmap[idx].base = NULL;
+		evlist->mmap[idx].fd = -1;
 		atomic_set(&evlist->mmap[idx].refcnt, 0);
 	}
 	auxtrace_mmap__munmap(&evlist->mmap[idx].auxtrace_mmap);
@@ -955,7 +956,7 @@ void perf_evlist__munmap(struct perf_evlist *evlist)
 
 static int perf_evlist__alloc_mmap(struct perf_evlist *evlist)
 {
-	int total_mmaps;
+	int total_mmaps, i;
 
 	evlist->nr_mmaps = cpu_map__nr(evlist->cpus);
 	if (cpu_map__empty(evlist->cpus))
@@ -966,7 +967,12 @@ static int perf_evlist__alloc_mmap(struct perf_evlist *evlist)
 		return -EINVAL;
 
 	evlist->mmap = zalloc(total_mmaps * sizeof(struct perf_mmap));
-	return evlist->mmap != NULL ? 0 : -ENOMEM;
+	if (!evlist->mmap)
+		return -ENOMEM;
+
+	for (i = 0; i < total_mmaps; i++)
+		evlist->mmap[i].fd = -1;
+	return 0;
 }
 
 struct mmap_params {
@@ -986,6 +992,10 @@ static int __perf_evlist__mmap(struct perf_evlist *evlist, int idx,
 	if (!perf_evlist__channel_check(evlist, channel, RDONLY))
 		prot |= PROT_WRITE;
 
+	if (evlist->mmap[idx].fd >= 0) {
+		pr_err("idx %d already mapped\n", idx);
+		return -1;
+	}
 	/*
 	 * The last one will be done at perf_evlist__mmap_consume(), so that we
 	 * make sure we don't prevent tools from consuming every last event in
@@ -1010,6 +1020,7 @@ static int __perf_evlist__mmap(struct perf_evlist *evlist, int idx,
 		evlist->mmap[idx].base = NULL;
 		return -1;
 	}
+	evlist->mmap[idx].fd = fd;
 
 	if (auxtrace_mmap__mmap(&evlist->mmap[idx].auxtrace_mmap,
 				&mp->auxtrace_mp, evlist->mmap[idx].base, fd))

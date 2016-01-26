@@ -36,6 +36,7 @@ enum perf_evlist_mmap_flag {
 struct perf_mmap {
 	void		 *base;
 	int		 mask;
+	int		 fd;
 	atomic_t	 refcnt;
 	u64		 prev;
 	struct auxtrace_mmap auxtrace_mmap;
