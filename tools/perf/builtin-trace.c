@@ -2525,6 +2525,17 @@ out_enomem:
 	goto out;
 }
 
+static int validate_evlist(struct perf_evlist *evlist)
+{
+	struct perf_evsel *evsel;
+
+	evlist__for_each(evlist, evsel) {
+		if (evsel->attr.type != PERF_TYPE_TRACEPOINT)
+			return -EINVAL;
+	}
+	return 0;
+}
+
 static int trace__run(struct trace *trace, int argc, const char **argv)
 {
 	struct perf_evlist *evlist = trace->evlist;
@@ -3110,6 +3121,11 @@ int cmd_trace(int argc, const char **argv, const char *prefix __maybe_unused)
 
 	argc = parse_options_subcommand(argc, argv, trace_options, trace_subcommands,
 				 trace_usage, PARSE_OPT_STOP_AT_NON_OPTION);
+
+	if (validate_evlist(trace.evlist)) {
+		pr_err("Only support tracepoint events!\n");
+		return -EINVAL;
+	}
 
 	if (trace.trace_pgfaults) {
 		trace.opts.sample_address = true;
