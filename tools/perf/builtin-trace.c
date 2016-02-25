@@ -2178,6 +2178,37 @@ out_dump:
 	return 0;
 }
 
+static void bpf_output__printer(enum binary_printer_ops op,
+				unsigned int val, void *extra)
+{
+	FILE *output = extra;
+	unsigned char ch = (unsigned char)val;
+
+	switch (op) {
+	case BINARY_PRINT_CHAR_DATA:
+		fprintf(output, "%c", isprint(ch) ? ch : '.');
+		break;
+	case BINARY_PRINT_DATA_BEGIN:
+	case BINARY_PRINT_LINE_BEGIN:
+	case BINARY_PRINT_ADDR:
+	case BINARY_PRINT_NUM_DATA:
+	case BINARY_PRINT_NUM_PAD:
+	case BINARY_PRINT_SEP:
+	case BINARY_PRINT_CHAR_PAD:
+	case BINARY_PRINT_LINE_END:
+	case BINARY_PRINT_DATA_END:
+	default:
+		break;
+	}
+}
+
+static void bpf_output__fprintf(struct trace *trace,
+				struct perf_sample *sample)
+{
+	print_binary(sample->raw_data, sample->raw_size, 8,
+		     bpf_output__printer, trace->output);
+}
+
 static int trace__event_handler(struct trace *trace, struct perf_evsel *evsel,
 				union perf_event *event __maybe_unused,
 				struct perf_sample *sample)
@@ -2190,7 +2221,9 @@ static int trace__event_handler(struct trace *trace, struct perf_evsel *evsel,
 
 	fprintf(trace->output, "%s:", evsel->name);
 
-	if (evsel->tp_format) {
+	if (perf_evsel__is_bpf_output(evsel)) {
+		bpf_output__fprintf(trace, sample);
+	} else if (evsel->tp_format) {
 		event_format__fprintf(evsel->tp_format, sample->cpu,
 				      sample->raw_data, sample->raw_size,
 				      trace->output);
@@ -2526,11 +2559,15 @@ out_enomem:
 	goto out;
 }
 
-static int validate_evlist(struct perf_evlist *evlist)
+static int validate_evlist(struct perf_evlist *evlist, bool *has_bpf_output)
 {
 	struct perf_evsel *evsel;
 
 	evlist__for_each(evlist, evsel) {
+		if (perf_evsel__is_bpf_output(evsel)) {
+			*has_bpf_output = true;
+			continue;
+		}
 		if (evsel->attr.type != PERF_TYPE_TRACEPOINT)
 			return -EINVAL;
 	}
@@ -3118,6 +3155,7 @@ int cmd_trace(int argc, const char **argv, const char *prefix __maybe_unused)
 	const char * const trace_subcommands[] = { "record", NULL };
 	int err;
 	char bf[BUFSIZ];
+	bool has_bpf_output = false;
 
 	signal(SIGSEGV, sighandler_dump_stack);
 	signal(SIGFPE, sighandler_dump_stack);
@@ -3133,12 +3171,12 @@ int cmd_trace(int argc, const char **argv, const char *prefix __maybe_unused)
 	argc = parse_options_subcommand(argc, argv, trace_options, trace_subcommands,
 				 trace_usage, PARSE_OPT_STOP_AT_NON_OPTION);
 
-	if (validate_evlist(trace.evlist)) {
-		pr_err("Only support tracepoint events!\n");
+	if (validate_evlist(trace.evlist, &has_bpf_output)) {
+		pr_err("Only support tracepoint and bpf-output events!\n");
 		return -EINVAL;
 	}
 
-	if (trace.trace_pgfaults) {
+	if (trace.trace_pgfaults || has_bpf_output) {
 		trace.opts.sample_address = true;
 		trace.opts.sample_time = true;
 	}
