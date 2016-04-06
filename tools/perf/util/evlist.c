@@ -807,6 +807,45 @@ union perf_event *perf_evlist__mmap_read(struct perf_evlist *evlist, int idx)
 	return perf_evlist__mmap_read_ex(evlist, -1, idx);
 }
 
+union perf_event *
+perf_evlist__mmap_read_backward(struct perf_evlist *evlist, int idx)
+{
+	struct perf_mmap *md = &evlist->mmap[idx];
+	u64 head, end;
+	u64 start = md->prev;
+
+	/*
+	 * Check if event was unmapped due to a POLLHUP/POLLERR.
+	 */
+	if (!atomic_read(&md->refcnt))
+		return NULL;
+
+	/* NOTE: head is negative in this case */
+	head = perf_mmap__read_head(md);
+
+	if (!head)
+		return NULL;
+
+	end = head + md->mask + 1;
+
+	if ((end - head) > -head)
+		end = 0;
+
+	return __perf_evlist__mmap_read(md, false, start, end, &md->prev);
+}
+
+void perf_evlist__mmap_read_catchup(struct perf_evlist *evlist, int idx)
+{
+	struct perf_mmap *md = &evlist->mmap[idx];
+	u64 head;
+
+	if (!atomic_read(&md->refcnt))
+		return;
+
+	head = perf_mmap__read_head(md);
+	md->prev = head;
+}
+
 static bool perf_mmap__empty(struct perf_mmap *md)
 {
 	return perf_mmap__read_head(md) == md->prev && !md->auxtrace_mmap.base;
