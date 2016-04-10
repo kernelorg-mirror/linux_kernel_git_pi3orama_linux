@@ -65,8 +65,8 @@ ifndef VERBOSE
 endif
 
 FEATURE_USER = .libbpf
-FEATURE_TESTS = libelf libelf-getphdrnum libelf-mmap bpf
-FEATURE_DISPLAY = libelf bpf
+FEATURE_TESTS = libelf libelf-getphdrnum libelf-mmap bpf ubpf
+FEATURE_DISPLAY = libelf bpf ubpf
 
 INCLUDES = -I. -I$(srctree)/tools/include -I$(srctree)/arch/$(ARCH)/include/uapi -I$(srctree)/include/uapi
 FEATURE_CHECK_CFLAGS-bpf = $(INCLUDES)

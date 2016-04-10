@@ -37,7 +37,8 @@ FILES=					\
 	test-zlib.bin			\
 	test-lzma.bin			\
 	test-bpf.bin			\
-	test-get_cpuid.bin
+	test-get_cpuid.bin		\
+	test-ubpf.bin
 
 FILES := $(addprefix $(OUTPUT),$(FILES))
 
@@ -181,6 +182,9 @@ $(OUTPUT)test-get_cpuid.bin:
 
 $(OUTPUT)test-bpf.bin:
 	$(BUILD)
+
+$(OUTPUT)test-ubpf.bin:
+	$(BUILD) -lubpf
 
 -include $(OUTPUT)*.d
 
