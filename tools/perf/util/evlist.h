@@ -23,6 +23,7 @@ struct record_opts;
 #define PERF_EVLIST__NR_CHANNELS	2
 enum perf_evlist_mmap_flag {
 	PERF_EVLIST__CHANNEL_ENABLED	= 1,
+	PERF_EVLIST__CHANNEL_CONTROL	= 2,
 };
 
 /**

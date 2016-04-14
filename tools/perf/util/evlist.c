@@ -971,9 +971,13 @@ static int __perf_evlist__mmap(struct perf_evlist *evlist, int idx,
 }
 
 static unsigned long
-perf_evlist__channel_for_evsel(struct perf_evsel *evsel __maybe_unused)
+perf_evlist__channel_for_evsel(struct perf_evsel *evsel)
 {
-	return 0;
+	unsigned long flag = 0;
+
+	if (evsel->control)
+		flag |= PERF_EVLIST__CHANNEL_CONTROL;
+	return flag;
 }
 
 static int
