@@ -670,6 +670,16 @@ static void apply_config_terms(struct perf_evsel *evsel,
 			 */
 			attr->inherit = term->val.inherit ? 1 : 0;
 			break;
+		case PERF_EVSEL__CONFIG_TERM_CONTROL:
+			if (!perf_evsel__is_bpf_output(evsel))
+				break;
+			if (!term->val.control)
+				break;
+			/* Force no-buffering */
+			attr->watermark = 0;
+			attr->wakeup_events = 1;
+			evsel->control = true;
+			break;
 		default:
 			break;
 		}

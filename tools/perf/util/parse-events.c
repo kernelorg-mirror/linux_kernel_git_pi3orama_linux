@@ -900,6 +900,7 @@ static const char *config_term_names[__PARSE_EVENTS__TERM_TYPE_NR] = {
 	[PARSE_EVENTS__TERM_TYPE_STACKSIZE]		= "stack-size",
 	[PARSE_EVENTS__TERM_TYPE_NOINHERIT]		= "no-inherit",
 	[PARSE_EVENTS__TERM_TYPE_INHERIT]		= "inherit",
+	[PARSE_EVENTS__TERM_TYPE_CONTROL]		= "control",
 };
 
 static bool config_term_shrinked;
@@ -994,6 +995,15 @@ do {									   \
 		break;
 	case PARSE_EVENTS__TERM_TYPE_NAME:
 		CHECK_TYPE_VAL(STR);
+		break;
+	case PARSE_EVENTS__TERM_TYPE_CONTROL:
+		if (!is_bpf_output_attr(attr)) {
+			err->str = strdup("only bpf-output event can be set to control");
+			err->idx = term->err_term;
+			err->help = parse_events_formats_error_string(NULL);
+			return -EINVAL;
+		}
+		CHECK_TYPE_VAL(NUM);
 		break;
 	default:
 		err->str = strdup("unknown term");
@@ -1108,6 +1118,9 @@ do {								\
 			break;
 		case PARSE_EVENTS__TERM_TYPE_NOINHERIT:
 			ADD_CONFIG_TERM(INHERIT, inherit, term->val.num ? 0 : 1);
+			break;
+		case PARSE_EVENTS__TERM_TYPE_CONTROL:
+			ADD_CONFIG_TERM(CONTROL, control, term->val.num ? 1 : 0);
 			break;
 		default:
 			break;

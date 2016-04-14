@@ -44,6 +44,7 @@ enum {
 	PERF_EVSEL__CONFIG_TERM_CALLGRAPH,
 	PERF_EVSEL__CONFIG_TERM_STACK_USER,
 	PERF_EVSEL__CONFIG_TERM_INHERIT,
+	PERF_EVSEL__CONFIG_TERM_CONTROL,
 	PERF_EVSEL__CONFIG_TERM_MAX,
 };
 
@@ -57,6 +58,7 @@ struct perf_evsel_config_term {
 		char	*callgraph;
 		u64	stack_user;
 		bool	inherit;
+		bool	control;
 	} val;
 };
 
@@ -112,6 +114,7 @@ struct perf_evsel {
 	bool			tracking;
 	bool			per_pkg;
 	bool			precise_max;
+	bool			control;
 	/* parse modifier helper */
 	int			exclude_GH;
 	int			nr_members;
@@ -368,12 +371,17 @@ static inline bool perf_evsel__is_function_event(struct perf_evsel *evsel)
 #undef FUNCTION_EVENT
 }
 
+static inline bool is_bpf_output_attr(struct perf_event_attr *attr)
+{
+	return (attr->config == PERF_COUNT_SW_BPF_OUTPUT) &&
+		(attr->type == PERF_TYPE_SOFTWARE);
+}
+
 static inline bool perf_evsel__is_bpf_output(struct perf_evsel *evsel)
 {
 	struct perf_event_attr *attr = &evsel->attr;
 
-	return (attr->config == PERF_COUNT_SW_BPF_OUTPUT) &&
-		(attr->type == PERF_TYPE_SOFTWARE);
+	return is_bpf_output_attr(attr);
 }
 
 struct perf_attr_details {
