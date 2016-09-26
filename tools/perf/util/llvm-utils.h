@@ -5,7 +5,11 @@
 #ifndef __LLVM_UTILS_H
 #define __LLVM_UTILS_H
 
-#include "debug.h"
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <errno.h>
 
 struct llvm_param {
 	/* Path of clang executable */
@@ -56,4 +60,7 @@ void llvm__get_kbuild_opts(char **kbuild_dir, char **kbuild_include_opts);
 int llvm__get_nr_cpus(void);
 
 void llvm__dump_obj(const char *path, void *obj_buf, size_t size);
+#ifdef __cplusplus
+}
+#endif
 #endif
