@@ -1,2 +1,3 @@
 libperf-$(CONFIG_CLANGLLVM) += clang.o
 libperf-$(CONFIG_CLANGLLVM) += clang-test.o
+libperf-$(CONFIG_CLANGLLVM) += bpf-funcs-str.o
