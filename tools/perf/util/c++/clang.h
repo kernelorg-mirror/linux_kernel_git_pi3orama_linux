@@ -11,16 +11,26 @@ namespace perf {
 
 using namespace llvm;
 
-std::unique_ptr<Module>
+class PerfModule {
+private:
+	std::unique_ptr<llvm::Module> Module;
+public:
+	inline llvm::Module *getModule(void)
+	{
+		return Module.get();
+	}
+
+	PerfModule(std::unique_ptr<llvm::Module>&& M);
+
+	std::unique_ptr<llvm::SmallVectorImpl<char>> toBPFObject(void);
+};
+
+std::unique_ptr<PerfModule>
 getModuleFromSource(opt::ArgStringList CFlags,
 		    StringRef Name, StringRef Content);
 
-std::unique_ptr<Module>
+std::unique_ptr<PerfModule>
 getModuleFromSource(opt::ArgStringList CFlags,
 		    StringRef Path);
-
-std::unique_ptr<llvm::SmallVectorImpl<char>>
-getBPFObjectFromModule(llvm::Module *Module);
-
 }
 #endif

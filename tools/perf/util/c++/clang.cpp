@@ -64,7 +64,7 @@ createCompilerInvocation(llvm::opt::ArgStringList CFlags, StringRef& Path,
 	return CI;
 }
 
-static std::unique_ptr<llvm::Module>
+static std::unique_ptr<PerfModule>
 getModuleFromSource(llvm::opt::ArgStringList CFlags,
 		    StringRef Path, IntrusiveRefCntPtr<vfs::FileSystem> VFS)
 {
@@ -80,12 +80,12 @@ getModuleFromSource(llvm::opt::ArgStringList CFlags,
 
 	std::unique_ptr<CodeGenAction> Act(new EmitLLVMOnlyAction(&*LLVMCtx));
 	if (!Clang.ExecuteAction(*Act))
-		return std::unique_ptr<llvm::Module>(nullptr);
+		return std::unique_ptr<PerfModule>(nullptr);
 
-	return Act->takeModule();
+	return std::unique_ptr<PerfModule>(new PerfModule(std::move(Act->takeModule())));
 }
 
-std::unique_ptr<llvm::Module>
+std::unique_ptr<PerfModule>
 getModuleFromSource(llvm::opt::ArgStringList CFlags,
 		    StringRef Name, StringRef Content)
 {
@@ -106,15 +106,21 @@ getModuleFromSource(llvm::opt::ArgStringList CFlags,
 	return getModuleFromSource(std::move(CFlags), Name, OverlayFS);
 }
 
-std::unique_ptr<llvm::Module>
+std::unique_ptr<PerfModule>
 getModuleFromSource(llvm::opt::ArgStringList CFlags, StringRef Path)
 {
 	IntrusiveRefCntPtr<vfs::FileSystem> VFS(vfs::getRealFileSystem());
 	return getModuleFromSource(std::move(CFlags), Path, VFS);
 }
 
+PerfModule::PerfModule(std::unique_ptr<llvm::Module>&& M) : Module(std::move(M))
+{
+
+}
+
+
 std::unique_ptr<llvm::SmallVectorImpl<char>>
-getBPFObjectFromModule(llvm::Module *Module)
+PerfModule::toBPFObject(void)
 {
 	using namespace llvm;
 
@@ -278,7 +284,7 @@ int perf_clang__compile_bpf(const char *_filename,
 	auto M = getModuleFromSource(std::move(CFlags), Opts.getFileName());
 	if (!M)
 		return  -EINVAL;
-	auto O = getBPFObjectFromModule(&*M);
+	auto O = M->toBPFObject();
 	if (!O)
 		return -EINVAL;
 
