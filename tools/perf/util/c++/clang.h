@@ -6,6 +6,7 @@
 #include "llvm/IR/Module.h"
 #include "llvm/Option/Option.h"
 #include <memory>
+#include <set>
 
 namespace perf {
 
@@ -14,6 +15,12 @@ using namespace llvm;
 class PerfModule {
 private:
 	std::unique_ptr<llvm::Module> Module;
+
+	std::set<llvm::GlobalVariable *> Maps;
+	std::set<llvm::Function *> BPFFunctions;
+	std::set<llvm::Function *> JITFunctions;
+	void prepareBPF(void);
+	void prepareJIT(void);
 public:
 	inline llvm::Module *getModule(void)
 	{
