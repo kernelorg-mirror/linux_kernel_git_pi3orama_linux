@@ -46,3 +46,11 @@ int bpf_func__SyS_epoll_wait(void *ctx)
 }
 char _license[] SEC("license") = "GPL";
 int _version SEC("version") = LINUX_VERSION_CODE;
+
+#ifdef TEST_PERF_HOOK
+SEC("perfhook:test")
+void hook_test(void)
+{
+	return;
+}
+#endif

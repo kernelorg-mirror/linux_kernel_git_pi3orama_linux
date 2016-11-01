@@ -14,9 +14,14 @@
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Tooling/Tooling.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/ExecutionEngine/Orc/CompileUtils.h"
+#include "llvm/ExecutionEngine/Orc/IRCompileLayer.h"
+#include "llvm/ExecutionEngine/Orc/LambdaResolver.h"
+#include "llvm/ExecutionEngine/Orc/ObjectLinkingLayer.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Option/Option.h"
+#include "llvm/Support/DynamicLibrary.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/ManagedStatic.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -24,11 +29,13 @@
 #include "llvm/Target/TargetMachine.h"
 #include "llvm/Target/TargetOptions.h"
 #include <memory>
+#include <vector>
 
 #include "clang.h"
 #include "clang-c.h"
 #include "llvm-utils.h"
 #include "util-cxx.h"
+#include "perf-hooks.h"
 
 namespace perf {
 
@@ -187,6 +194,66 @@ PerfModule::toBPFObject(void)
 	return std::move(Buffer);
 }
 
+/*
+ * Use a global memory manager so allocated code and data won't be released
+ * when object destroy.
+ */
+static llvm::SectionMemoryManager JITMemoryManager;
+
+int PerfModule::doJIT(void)
+{
+	using namespace orc;
+
+	prepareJIT();
+
+	std::unique_ptr<TargetMachine> TM(EngineBuilder().selectTarget());
+	if (!TM) {
+		llvm::errs() << "Can't get target machine\n";
+		return -1;
+	}
+	const DataLayout DL(TM->createDataLayout());
+	Module->setDataLayout(DL);
+	Module->setTargetTriple(TM->getTargetTriple().normalize());
+
+	ObjectLinkingLayer<> ObjectLayer;
+	IRCompileLayer<decltype(ObjectLayer)> CompileLayer(ObjectLayer, SimpleCompiler(*TM));
+
+	auto Resolver = createLambdaResolver(
+			[](const std::string &Name) {
+				return RuntimeDyld::SymbolInfo(nullptr);
+			},
+			[](const std::string &Name) {
+				return RuntimeDyld::SymbolInfo(nullptr);
+			});
+
+	std::vector<llvm::Module *> Ms;
+	Ms.push_back(getModule());
+	CompileLayer.addModuleSet(std::move(Ms),
+			&JITMemoryManager,
+			std::move(Resolver));
+
+
+	for (Function *F : JITFunctions) {
+		JITSymbol sym = CompileLayer.findSymbol(F->getName().str(), true);
+
+		/*
+		 * Type of F->getSection() is moving from
+		 * const char * to StringRef.
+		 * Convert it to std::string so we don't need
+		 * consider this API change.
+		 */
+		std::string sec(F->getSection());
+		std::string hook(&sec.c_str()[sizeof("perfhook:") - 1]);
+		perf_hook_func_t func = (perf_hook_func_t)(intptr_t)sym.getAddress();
+
+		if (JITResult[hook])
+			llvm::errs() << "Warning: multiple functions on hook "
+				     << hook << ", only one is used\n";
+		JITResult[hook] = func;
+	}
+	return 0;
+}
+
 class ClangOptions {
 	llvm::SmallString<PATH_MAX> FileName;
 	llvm::SmallString<64> KVerDef;
@@ -292,6 +359,10 @@ void perf_clang__init(void)
 	LLVMInitializeBPFTarget();
 	LLVMInitializeBPFTargetMC();
 	LLVMInitializeBPFAsmPrinter();
+
+	llvm::InitializeNativeTarget();
+	llvm::InitializeNativeTargetAsmPrinter();
+	llvm::InitializeNativeTargetAsmParser();
 }
 
 void perf_clang__cleanup(void)

@@ -16,6 +16,10 @@ static struct {
 		.func = test__clang_to_obj,
 		.desc = "Test builtin clang compile C source to ELF object",
 	},
+	{
+		.func = test__clang_jit,
+		.desc = "Test builtin clang compile mixed BPF and native code",
+	},
 #endif
 };
 
