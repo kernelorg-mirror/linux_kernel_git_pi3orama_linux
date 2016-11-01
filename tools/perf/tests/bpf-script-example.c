@@ -48,9 +48,13 @@ char _license[] SEC("license") = "GPL";
 int _version SEC("version") = LINUX_VERSION_CODE;
 
 #ifdef TEST_PERF_HOOK
+extern int printf(const char *fmt, ...);
+extern void test__clang_callback(int x);
 SEC("perfhook:test")
 void hook_test(void)
 {
+	printf("Hello, hook_test\n");
+	test__clang_callback(1234);
 	return;
 }
 #endif

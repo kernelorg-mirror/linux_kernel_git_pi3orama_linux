@@ -30,6 +30,8 @@
 #include "llvm/Target/TargetOptions.h"
 #include <memory>
 #include <vector>
+#include <set>
+#include <tuple>
 
 #include "clang.h"
 #include "clang-c.h"
@@ -194,6 +196,15 @@ PerfModule::toBPFObject(void)
 	return std::move(Buffer);
 }
 
+static std::map<const std::string, const void *> exported_funcs =
+{
+#define EXPORT(f) {#f, (const void *)&f}
+	EXPORT(test__clang_callback),
+	EXPORT(printf),
+	EXPORT(puts),
+#undef EXPORT
+};
+
 /*
  * Use a global memory manager so allocated code and data won't be released
  * when object destroy.
@@ -220,7 +231,11 @@ int PerfModule::doJIT(void)
 
 	auto Resolver = createLambdaResolver(
 			[](const std::string &Name) {
-				return RuntimeDyld::SymbolInfo(nullptr);
+				auto i = exported_funcs.find(Name);
+				if (i == exported_funcs.end())
+					return RuntimeDyld::SymbolInfo(nullptr);
+				return RuntimeDyld::SymbolInfo((uint64_t)(i->second),
+							       JITSymbolFlags::Exported);
 			},
 			[](const std::string &Name) {
 				return RuntimeDyld::SymbolInfo(nullptr);

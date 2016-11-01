@@ -68,6 +68,13 @@ int test__clang_to_obj(void)
 	return 0;
 }
 
+static int callback_flag;
+
+void test__clang_callback(int x)
+{
+	callback_flag = x;
+}
+
 int test__clang_jit(void)
 {
 	perf_clang_scope _scope;
@@ -84,6 +91,8 @@ int test__clang_jit(void)
 		perf_hooks__set_hook(i.first.c_str(), i.second, NULL);
 
 	perf_hooks__invoke_test();
+	if (callback_flag != 1234)
+		return -1;
 	return 0;
 }
 

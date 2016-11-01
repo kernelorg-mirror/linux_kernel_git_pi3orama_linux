@@ -16,6 +16,8 @@ extern int test__clang_to_IR(void);
 extern int test__clang_to_obj(void);
 extern int test__clang_jit(void);
 
+extern void test__clang_callback(int x);
+
 extern int perf_clang__compile_bpf(const char *filename,
 				   void **p_obj_buf,
 				   size_t *p_obj_buf_sz);
