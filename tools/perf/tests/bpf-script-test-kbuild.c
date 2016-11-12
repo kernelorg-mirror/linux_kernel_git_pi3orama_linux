@@ -6,7 +6,9 @@
 # error Need LINUX_VERSION_CODE
 # error Example: for 4.2 kernel, put 'clang-opt="-DLINUX_VERSION_CODE=0x40200" into llvm section of ~/.perfconfig'
 #endif
+#ifndef BUILTIN_CLANG_DEFAULT_INCLUDE
 #define SEC(NAME) __attribute__((section(NAME), used))
+#endif
 
 #include <uapi/linux/fs.h>
 #include <uapi/asm/ptrace.h>

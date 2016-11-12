@@ -5,6 +5,7 @@ extern "C" {
 #endif
 
 extern const char clang_builtin_bpf_funcs_str[];
+extern const char clang_builtin_bpf_helper_str[];
 
 #ifdef __cplusplus
 }

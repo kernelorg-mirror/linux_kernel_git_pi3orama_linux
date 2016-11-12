@@ -48,6 +48,7 @@ static struct BPFHeader {
 	llvm::StringRef Content;
 } BPFHeaders[] = {
 	{"/virtual/bpf-funcs.h", clang_builtin_bpf_funcs_str},
+	{"/virtual/bpf-helper.h", clang_builtin_bpf_helper_str},
 };
 
 static std::unique_ptr<llvm::LLVMContext> LLVMCtx;

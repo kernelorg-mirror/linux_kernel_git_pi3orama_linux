@@ -9,6 +9,7 @@
 #define BPF_ANY 0
 #define BPF_MAP_TYPE_ARRAY 2
 
+#ifndef BUILTIN_CLANG_DEFAULT_INCLUDE
 struct bpf_map_def {
 	unsigned int type;
 	unsigned int key_size;
@@ -17,8 +18,6 @@ struct bpf_map_def {
 };
 
 #define SEC(NAME) __attribute__((section(NAME), used))
-
-#ifndef BUILTIN_CLANG_DEFAULT_INCLUDE
 #define BPF_FUNC_map_lookup_elem 1
 #define BPF_FUNC_map_update_elem 2
 

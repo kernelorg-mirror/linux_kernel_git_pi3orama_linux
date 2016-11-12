@@ -6,7 +6,6 @@
 # error Need LINUX_VERSION_CODE
 # error Example: for 4.2 kernel, put 'clang-opt="-DLINUX_VERSION_CODE=0x40200" into llvm section of ~/.perfconfig'
 #endif
-#define SEC(NAME) __attribute__((section(NAME), used))
 
 #include <uapi/linux/fs.h>
 
@@ -14,6 +13,9 @@
 #define FMODE_WRITE		0x2
 
 #ifndef BUILTIN_CLANG_DEFAULT_INCLUDE
+
+#define SEC(NAME) __attribute__((section(NAME), used))
+
 static void (*bpf_trace_printk)(const char *fmt, int fmt_size, ...) =
 	(void *) 6;
 #endif
