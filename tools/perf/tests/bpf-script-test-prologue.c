@@ -13,8 +13,10 @@
 #define FMODE_READ		0x1
 #define FMODE_WRITE		0x2
 
+#ifndef BUILTIN_CLANG_DEFAULT_INCLUDE
 static void (*bpf_trace_printk)(const char *fmt, int fmt_size, ...) =
 	(void *) 6;
+#endif
 
 SEC("func=null_lseek file->f_mode offset orig")
 int bpf_func__null_lseek(void *ctx, int err, unsigned long f_mode,

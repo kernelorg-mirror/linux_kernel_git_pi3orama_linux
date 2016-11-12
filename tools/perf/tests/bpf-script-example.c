@@ -8,13 +8,6 @@
 #endif
 #define BPF_ANY 0
 #define BPF_MAP_TYPE_ARRAY 2
-#define BPF_FUNC_map_lookup_elem 1
-#define BPF_FUNC_map_update_elem 2
-
-static void *(*bpf_map_lookup_elem)(void *map, void *key) =
-	(void *) BPF_FUNC_map_lookup_elem;
-static void *(*bpf_map_update_elem)(void *map, void *key, void *value, int flags) =
-	(void *) BPF_FUNC_map_update_elem;
 
 struct bpf_map_def {
 	unsigned int type;
@@ -24,6 +17,17 @@ struct bpf_map_def {
 };
 
 #define SEC(NAME) __attribute__((section(NAME), used))
+
+#ifndef BUILTIN_CLANG_DEFAULT_INCLUDE
+#define BPF_FUNC_map_lookup_elem 1
+#define BPF_FUNC_map_update_elem 2
+
+static void *(*bpf_map_lookup_elem)(void *map, void *key) =
+	(void *) BPF_FUNC_map_lookup_elem;
+static void *(*bpf_map_update_elem)(void *map, void *key, void *value, int flags) =
+	(void *) BPF_FUNC_map_update_elem;
+#endif
+
 struct bpf_map_def SEC("maps") flip_table = {
 	.type = BPF_MAP_TYPE_ARRAY,
 	.key_size = sizeof(int),
