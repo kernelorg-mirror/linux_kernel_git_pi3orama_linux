@@ -122,7 +122,7 @@ getModuleFromSource(llvm::opt::ArgStringList CFlags, StringRef Path)
 	return getModuleFromSource(std::move(CFlags), Path, VFS);
 }
 
-PerfModule::PerfModule(std::unique_ptr<llvm::Module>&& M) : Module(std::move(M))
+PerfModule::PerfModule(std::unique_ptr<llvm::Module>&& M) : Module(std::move(M)), _map_base(NULL)
 {
 	for (llvm::Function& F : *Module) {
 		if (F.getLinkage() != llvm::GlobalValue::ExternalLinkage)
@@ -247,6 +247,13 @@ int PerfModule::doJIT(void)
 			&JITMemoryManager,
 			std::move(Resolver));
 
+	void *map_base = NULL;
+	for (llvm::GlobalValue *map : Maps) {
+		JITSymbol sym = CompileLayer.findSymbol(map->getName().str(), true);
+		void *address = (void *)(intptr_t)sym.getAddress();
+		if (!map_base || address < map_base)
+			map_base = address;
+	}
 
 	for (Function *F : JITFunctions) {
 		JITSymbol sym = CompileLayer.findSymbol(F->getName().str(), true);
@@ -266,6 +273,7 @@ int PerfModule::doJIT(void)
 				     << hook << ", only one is used\n";
 		JITResult[hook] = func;
 	}
+	_map_base = map_base;
 	return 0;
 }
 
@@ -389,7 +397,8 @@ void perf_clang__cleanup(void)
 int perf_clang__compile_bpf(const char *_filename,
 			    void **p_obj_buf,
 			    size_t *p_obj_buf_sz,
-			    jitted_funcs_map_t *p_funcs_map)
+			    jitted_funcs_map_t *p_funcs_map,
+			    void **p_map_base)
 {
 	using namespace perf;
 
@@ -422,6 +431,8 @@ int perf_clang__compile_bpf(const char *_filename,
 
 	if (p_funcs_map)
 		*p_funcs_map = (jitted_funcs_map_t)(M->copyJITResult());
+	if (p_map_base)
+		*p_map_base = M->getMapBase();
 	return 0;
 }
 

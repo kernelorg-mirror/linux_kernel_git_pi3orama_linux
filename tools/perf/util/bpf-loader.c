@@ -47,6 +47,10 @@ struct bpf_prog_priv {
 	int *type_mapping;
 };
 
+struct bpf_obj_priv {
+	void *map_base;
+};
+
 static bool libbpf_initialized;
 
 struct bpf_object *
@@ -70,9 +74,20 @@ bpf__prepare_load_buffer(void *obj_buf, size_t obj_buf_sz, const char *name)
 	return obj;
 }
 
+static void
+clear_obj_priv(struct bpf_object *obj __maybe_unused,
+	       void *_priv)
+{
+	struct bpf_obj_priv *priv = _priv;
+
+	free(priv);
+}
+
 struct bpf_object *bpf__prepare_load(const char *filename, bool source)
 {
 	struct bpf_object *obj;
+	void *map_base = NULL;
+	int err;
 
 	if (!libbpf_initialized) {
 		libbpf_set_print(libbpf_warning,
@@ -82,14 +97,14 @@ struct bpf_object *bpf__prepare_load(const char *filename, bool source)
 	}
 
 	if (source) {
-		int err;
 		void *obj_buf;
 		size_t obj_buf_sz;
 		jitted_funcs_map_t jitted_funcs_map;
 
 		perf_clang__init();
 		err = perf_clang__compile_bpf(filename, &obj_buf,
-					      &obj_buf_sz, &jitted_funcs_map);
+					      &obj_buf_sz, &jitted_funcs_map,
+					      &map_base);
 		perf_clang__cleanup();
 		if (err) {
 			pr_warning("bpf: builtin compiling failed: %d, try external compiler\n", err);
@@ -119,7 +134,27 @@ struct bpf_object *bpf__prepare_load(const char *filename, bool source)
 		return obj;
 	}
 
+	if (map_base) {
+		struct bpf_obj_priv *priv = calloc(sizeof(*priv), 1);
+
+		if (!priv) {
+			pr_debug("bpf: failed to alloc priv for object\n");
+			err = -ENOMEM;
+			goto errout;
+		}
+		priv->map_base = map_base;
+
+		err = bpf_object__set_priv(obj, priv, clear_obj_priv);
+		if (err) {
+			pr_debug("Failed to set priv for object '%s'\n", filename);
+			goto errout;
+		}
+	}
+
 	return obj;
+errout:
+	bpf_object__close(obj);
+	return ERR_PTR(err);
 }
 
 void bpf__clear(void)

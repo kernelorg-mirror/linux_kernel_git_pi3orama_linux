@@ -26,6 +26,7 @@ private:
 	std::set<llvm::Function *> JITFunctions;
 
 	HookMap JITResult;
+	void *_map_base;
 
 	void prepareBPF(void);
 	void prepareJIT(void);
@@ -37,6 +38,10 @@ public:
 	inline HookMap *copyJITResult(void)
 	{
 		return new HookMap(JITResult);
+	}
+	inline void *getMapBase(void)
+	{
+		return _map_base;
 	}
 
 	PerfModule(std::unique_ptr<llvm::Module>&& M);

@@ -22,7 +22,8 @@ extern void test__clang_callback(int x);
 extern int perf_clang__compile_bpf(const char *filename,
 				   void **p_obj_buf,
 				   size_t *p_obj_buf_sz,
-				   jitted_funcs_map_t *p_funcs_map);
+				   jitted_funcs_map_t *p_funcs_map,
+				   void **p_map_base);
 
 extern int
 perf_clang__hook_jitted_func(jitted_funcs_map_t map, void *ctx, bool is_err);
@@ -40,7 +41,8 @@ static inline int
 perf_clang__compile_bpf(const char *filename __maybe_unused,
 			void **p_obj_buf __maybe_unused,
 			size_t *p_obj_buf_sz __maybe_unused,
-			jitted_funcs_map_t *p_funcs_map __maybe_unused)
+			jitted_funcs_map_t *p_funcs_map __maybe_unused,
+			void **p_map_base __maybe_unused)
 {
 	return -ENOTSUP;
 }
