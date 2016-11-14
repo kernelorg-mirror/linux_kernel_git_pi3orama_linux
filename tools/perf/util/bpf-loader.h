@@ -84,6 +84,9 @@ int bpf__setup_stdout(struct perf_evlist *evlist);
 int bpf__strerror_setup_stdout(struct perf_evlist *evlist, int err,
 			       char *buf, size_t size);
 
+int bpf__map_fd(struct bpf_object *obj, void *jit_map);
+int bpf__strerror_map_fd(struct bpf_object *obj, void *jit_map,
+			 int err, char *buf, size_t size);
 #else
 static inline struct bpf_object *
 bpf__prepare_load(const char *filename __maybe_unused,
@@ -133,6 +136,13 @@ static inline int
 bpf__setup_stdout(struct perf_evlist *evlist __maybe_unused)
 {
 	return 0;
+}
+
+static inline int
+bpf__map_fd(struct bpf_object *obj __maybe_unused,
+	    void *map_ptr __maybe_unused)
+{
+	return -ENOTSUP;
 }
 
 static inline int
@@ -193,6 +203,15 @@ static inline int
 bpf__strerror_setup_stdout(struct perf_evlist *evlist __maybe_unused,
 			   int err __maybe_unused, char *buf,
 			   size_t size)
+{
+	return __bpf_strerror(buf, size);
+}
+
+static inline int
+bpf__strerror_map_fd(struct bpf_object *obj __maybe_unused,
+		     void *jit_map __maybe_unused,
+		     int err __maybe_unused,
+		     char *buf, size_t size);
 {
 	return __bpf_strerror(buf, size);
 }

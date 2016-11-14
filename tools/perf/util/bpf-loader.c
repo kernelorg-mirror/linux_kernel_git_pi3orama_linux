@@ -19,6 +19,7 @@
 #include "parse-events.h"
 #include "llvm-utils.h"
 #include "c++/clang-c.h"
+#include "asm/bug.h"	// for WARN_ONCE
 
 #define DEFINE_PRINT_FN(name, level) \
 static int libbpf_##name(const char *fmt, ...)	\
@@ -1644,6 +1645,28 @@ int bpf__setup_stdout(struct perf_evlist *evlist __maybe_unused)
 	return 0;
 }
 
+int bpf__map_fd(struct bpf_object *obj, void *jit_map)
+{
+	struct bpf_obj_priv *priv = bpf_object__priv(obj);
+	struct bpf_map *map;
+	size_t map_offset;
+	void *map_base;
+
+	if (IS_ERR(priv))
+		return PTR_ERR(priv);
+	if (!priv)
+		return -EINVAL;
+
+	map_base = priv->map_base;
+	map_offset = jit_map - map_base;
+	map = bpf_object__find_map_by_offset(obj, map_offset);
+	WARN_ONCE(IS_ERR(map), "can't find map offset %zu from '%s'\n",
+		  map_offset, bpf_object__name(obj));
+	if (IS_ERR(map))
+		return -ENOENT;
+	return bpf_map__fd(map);
+}
+
 #define ERRNO_OFFSET(e)		((e) - __BPF_LOADER_ERRNO__START)
 #define ERRCODE_OFFSET(c)	ERRNO_OFFSET(BPF_LOADER_ERRNO__##c)
 #define NR_ERRNO	(__BPF_LOADER_ERRNO__END - __BPF_LOADER_ERRNO__START)
@@ -1822,6 +1845,20 @@ int bpf__strerror_setup_stdout(struct perf_evlist *evlist __maybe_unused,
 			       int err, char *buf, size_t size)
 {
 	bpf__strerror_head(err, buf, size);
+	bpf__strerror_end(buf, size);
+	return 0;
+}
+
+int bpf__strerror_map_fd(struct bpf_object *obj, void *jit_map,
+			 int err, char *buf, size_t size)
+{
+	struct bpf_obj_priv *priv = bpf_object__priv(obj);
+	ptrdiff_t offset = priv ? jit_map - priv->map_base : jit_map - NULL;
+
+	bpf__strerror_head(err, buf, size);
+	bpf__strerror_entry(EINVAL, "No map in BPF object %s", bpf_object__name(obj));
+	bpf__strerror_entry(ENOENT, "Can't find map offset %lx in BPF object %s",
+			    (unsigned long)offset, bpf_object__name(obj));
 	bpf__strerror_end(buf, size);
 	return 0;
 }
