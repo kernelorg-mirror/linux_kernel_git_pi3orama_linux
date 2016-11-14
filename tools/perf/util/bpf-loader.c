@@ -85,9 +85,11 @@ struct bpf_object *bpf__prepare_load(const char *filename, bool source)
 		int err;
 		void *obj_buf;
 		size_t obj_buf_sz;
+		jitted_funcs_map_t jitted_funcs_map;
 
 		perf_clang__init();
-		err = perf_clang__compile_bpf(filename, &obj_buf, &obj_buf_sz);
+		err = perf_clang__compile_bpf(filename, &obj_buf,
+					      &obj_buf_sz, &jitted_funcs_map);
 		perf_clang__cleanup();
 		if (err) {
 			pr_warning("bpf: builtin compiling failed: %d, try external compiler\n", err);
@@ -100,6 +102,13 @@ struct bpf_object *bpf__prepare_load(const char *filename, bool source)
 
 		if (!IS_ERR(obj) && llvm_param.dump_obj)
 			llvm__dump_obj(filename, obj_buf, obj_buf_sz);
+
+		/*
+		 * Call perf_clang__hook_jitted_func even IS_ERR(obj) to make sure
+		 * the C++ map pointer is deleted.
+		 */
+		if (jitted_funcs_map)
+			perf_clang__hook_jitted_func(jitted_funcs_map, obj, IS_ERR(obj));
 
 		free(obj_buf);
 	} else

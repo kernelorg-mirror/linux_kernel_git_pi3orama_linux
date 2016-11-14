@@ -388,7 +388,8 @@ void perf_clang__cleanup(void)
 
 int perf_clang__compile_bpf(const char *_filename,
 			    void **p_obj_buf,
-			    size_t *p_obj_buf_sz)
+			    size_t *p_obj_buf_sz,
+			    jitted_funcs_map_t *p_funcs_map)
 {
 	using namespace perf;
 
@@ -415,6 +416,31 @@ int perf_clang__compile_bpf(const char *_filename,
 	memcpy(buffer, O->data(), size);
 	*p_obj_buf = buffer;
 	*p_obj_buf_sz = size;
+
+	if (M->doJIT())
+		return -1;
+
+	if (p_funcs_map)
+		*p_funcs_map = (jitted_funcs_map_t)(M->copyJITResult());
+	return 0;
+}
+
+int perf_clang__hook_jitted_func(jitted_funcs_map_t map, void *ctx, bool is_err)
+{
+	std::unique_ptr<perf::PerfModule::HookMap>
+		hook_map((perf::PerfModule::HookMap *)map);
+
+	/* Do nothing but ensure map is deleted */
+	if (is_err)
+		return -1;
+
+	for (auto i : *hook_map) {
+		const char *hook_name = i.first.c_str();
+		perf_hook_func_t hook_func = i.second;
+
+		if (perf_hooks__set_hook(hook_name, hook_func, ctx))
+			return -1;
+	}
 	return 0;
 }
 }
