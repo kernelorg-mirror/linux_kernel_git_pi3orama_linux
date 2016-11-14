@@ -236,6 +236,7 @@ static std::map<const std::string, const void *> exported_funcs =
 	EXPORT(test__clang_callback),
 	EXPORT(printf),
 	EXPORT(puts),
+	EXPORT(getpid),
 	EXPORT(JIT_HELPER_FUNC_NAME(map_update_elem)),
 	EXPORT(JIT_HELPER_FUNC_NAME(map_lookup_elem)),
 	EXPORT(JIT_HELPER_FUNC_NAME(map_get_next_key)),
