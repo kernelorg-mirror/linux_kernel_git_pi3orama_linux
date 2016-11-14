@@ -124,6 +124,7 @@ libperf-$(CONFIG_DWARF) += genelf_debug.o
 endif
 
 libperf-y += perf-hooks.o
+libperf-y += jit-helpers.o
 
 libperf-$(CONFIG_CXX) += c++/
 

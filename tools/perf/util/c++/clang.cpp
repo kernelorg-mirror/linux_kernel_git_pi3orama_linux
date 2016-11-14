@@ -38,6 +38,7 @@
 #include "llvm-utils.h"
 #include "util-cxx.h"
 #include "perf-hooks.h"
+#include "jit-helpers.h"
 
 namespace perf {
 
@@ -196,12 +197,19 @@ PerfModule::toBPFObject(void)
 	return std::move(Buffer);
 }
 
+#define __stringify_1(x)	#x
+#define __stringify(x)		__stringify_1(x)
 static std::map<const std::string, const void *> exported_funcs =
 {
-#define EXPORT(f) {#f, (const void *)&f}
+#define EXPORT(f) {__stringify(f), (const void *)&f}
 	EXPORT(test__clang_callback),
 	EXPORT(printf),
 	EXPORT(puts),
+	EXPORT(JIT_HELPER_FUNC_NAME(map_update_elem)),
+	EXPORT(JIT_HELPER_FUNC_NAME(map_lookup_elem)),
+	EXPORT(JIT_HELPER_FUNC_NAME(map_get_next_key)),
+	EXPORT(JIT_HELPER_FUNC_NAME(map_pin)),
+	EXPORT(JIT_HELPER_FUNC_NAME(map_get)),
 #undef EXPORT
 };
 
