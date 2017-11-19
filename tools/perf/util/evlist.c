@@ -799,7 +799,7 @@ perf_evlist__should_poll(struct perf_evlist *evlist __maybe_unused,
 }
 
 static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int idx,
-				       struct mmap_params *mp, int cpu_idx,
+				       struct mmap_params mp, int cpu_idx,
 				       int thread, int *_output, int *_output_backward)
 {
 	struct perf_evsel *evsel;
@@ -824,6 +824,7 @@ static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int idx,
 				if (evlist->bkw_mmap_state == BKW_MMAP_NOTREADY)
 					perf_evlist__toggle_bkw_mmap(evlist, BKW_MMAP_RUNNING);
 			}
+			mp.prot &= ~PROT_WRITE;
 		}
 
 		if (evsel->system_wide && thread)
@@ -838,7 +839,7 @@ static int perf_evlist__mmap_per_evsel(struct perf_evlist *evlist, int idx,
 		if (*output == -1) {
 			*output = fd;
 
-			if (perf_mmap__mmap(&maps[idx], mp, *output)  < 0)
+			if (perf_mmap__mmap(&maps[idx], &mp, *output)  < 0)
 				return -1;
 		} else {
 			if (ioctl(fd, PERF_EVENT_IOC_SET_OUTPUT, *output) != 0)
@@ -890,7 +891,7 @@ static int perf_evlist__mmap_per_cpu(struct perf_evlist *evlist,
 					      true);
 
 		for (thread = 0; thread < nr_threads; thread++) {
-			if (perf_evlist__mmap_per_evsel(evlist, cpu, mp, cpu,
+			if (perf_evlist__mmap_per_evsel(evlist, cpu, *mp, cpu,
 							thread, &output, &output_backward))
 				goto out_unmap;
 		}
@@ -917,7 +918,7 @@ static int perf_evlist__mmap_per_thread(struct perf_evlist *evlist,
 		auxtrace_mmap_params__set_idx(&mp->auxtrace_mp, evlist, thread,
 					      false);
 
-		if (perf_evlist__mmap_per_evsel(evlist, thread, mp, 0, thread,
+		if (perf_evlist__mmap_per_evsel(evlist, thread, *mp, 0, thread,
 						&output, &output_backward))
 			goto out_unmap;
 	}
