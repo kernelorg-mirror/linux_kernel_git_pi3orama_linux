@@ -43,6 +43,7 @@ static bool done = false, silent = false, fshared = false;
 static unsigned int nblocked_threads = 0, nwaking_threads = 0;
 static pthread_mutex_t thread_lock;
 static pthread_cond_t thread_parent, thread_worker;
+static pthread_barrier_t barrier;
 static struct stats waketime_stats, wakeup_stats;
 static unsigned int threads_starting;
 static int futex_flag = 0;
@@ -65,6 +66,8 @@ static void *waking_workerfn(void *arg)
 	struct thread_data *waker = (struct thread_data *) arg;
 	struct timeval start, end;
 
+	pthread_barrier_wait(&barrier);
+
 	gettimeofday(&start, NULL);
 
 	waker->nwoken = futex_wake(&futex, nwakes, futex_flag);
@@ -85,6 +88,8 @@ static void wakeup_threads(struct thread_data *td, pthread_attr_t thread_attr)
 
 	pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
 
+	pthread_barrier_init(&barrier, NULL, nwaking_threads + 1);
+
 	/* create and block all threads */
 	for (i = 0; i < nwaking_threads; i++) {
 		/*
@@ -97,9 +102,13 @@ static void wakeup_threads(struct thread_data *td, pthread_attr_t thread_attr)
 			err(EXIT_FAILURE, "pthread_create");
 	}
 
+	pthread_barrier_wait(&barrier);
+
 	for (i = 0; i < nwaking_threads; i++)
 		if (pthread_join(td[i].worker, NULL))
 			err(EXIT_FAILURE, "pthread_join");
+
+	pthread_barrier_destroy(&barrier);
 }
 
 static void *blocked_workerfn(void *arg __maybe_unused)
